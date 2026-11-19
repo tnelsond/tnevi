@@ -19,8 +19,9 @@ public final class SwipeDecoder {
     private static final int N = 48;
 
     private final String[] words;   // display form, in frequency order
-    private final String[] seqs;    // letters only, consecutive duplicates collapsed
-    private final List<List<Integer>> buckets; // index by first*26+last letter
+    private final String[] seqs;    // key indices as chars, consecutive duplicates collapsed (null = not swipeable)
+    private final List<List<Integer>> buckets; // index by first*K+last key
+    private final int keyCount;
 
     public float freqWeight = 0.08f;
     /** Weight of the language-model cost when a {@link Scorer} is given. */
@@ -33,32 +34,60 @@ public final class SwipeDecoder {
         float cost(int index);
     }
 
-    public SwipeDecoder(List<String> wordList) {
-        int n = wordList.size();
-        words = new String[n];
-        seqs = new String[n];
-        buckets = new ArrayList<>(26 * 26);
-        for (int i = 0; i < 26 * 26; i++) buckets.add(new ArrayList<Integer>());
-        for (int i = 0; i < n; i++) {
-            String w = wordList.get(i);
-            words[i] = w;
+    /** Maps a word to the keys a finger passes through: one char per key index, or null if untypeable. */
+    public interface Keyer {
+        String keys(String word);
+    }
+
+    /** QWERTY: letters a-z are keys 0-25; apostrophes and other characters are skipped. */
+    public static final Keyer LATIN = new Keyer() {
+        @Override public String keys(String w) {
             StringBuilder sb = new StringBuilder();
             for (int k = 0; k < w.length(); k++) {
                 char c = Character.toLowerCase(w.charAt(k));
-                if (c < 'a' || c > 'z') continue;
+                if (c >= 'a' && c <= 'z') sb.append((char) (c - 'a'));
+            }
+            return sb.toString();
+        }
+    };
+
+    public SwipeDecoder(List<String> wordList) {
+        this(wordList, LATIN, 26);
+    }
+
+    public SwipeDecoder(List<String> wordList, Keyer keyer, int keyCount) {
+        this.keyCount = keyCount;
+        int n = wordList.size();
+        words = new String[n];
+        seqs = new String[n];
+        buckets = new ArrayList<>(keyCount * keyCount);
+        for (int i = 0; i < keyCount * keyCount; i++) buckets.add(new ArrayList<Integer>());
+        for (int i = 0; i < n; i++) {
+            String w = wordList.get(i);
+            words[i] = w;
+            String k = keyer.keys(w);
+            if (k == null) continue;
+            StringBuilder sb = new StringBuilder();
+            for (int j = 0; j < k.length(); j++) {
+                char c = k.charAt(j);
+                if (c >= keyCount) { sb = null; break; }
                 if (sb.length() > 0 && sb.charAt(sb.length() - 1) == c) continue;
                 sb.append(c);
             }
+            if (sb == null) continue;
             seqs[i] = sb.toString();
-            if (sb.length() >= 2) buckets.get((sb.charAt(0) - 'a') * 26 + (sb.charAt(sb.length() - 1) - 'a')).add(i);
+            if (sb.length() >= 2) buckets.get(sb.charAt(0) * keyCount + sb.charAt(sb.length() - 1)).add(i);
         }
     }
+
+    /** Key path used for a word (for tests), or null. */
+    public String keysOf(int index) { return seqs[index]; }
 
     public int size() { return words.length; }
 
     /**
      * @param xs,ys   gesture points (any coordinate system shared with centers)
-     * @param centers key centre for each letter a-z (index c-'a'), null if missing
+     * @param centers key centre for each key index (letters a-z are 0-25 on QWERTY), null if missing
      * @param keyW    typical key width in the same units
      */
     public List<String> decode(float[] xs, float[] ys, int count, float[][] centers, float keyW, int max) {
@@ -75,7 +104,7 @@ public final class SwipeDecoder {
         final List<float[]> scored = new ArrayList<>(); // {score, index}
         float r = keyW * passRadius;
         for (int f : firsts) for (int l : lasts) {
-            for (int idx : buckets.get(f * 26 + l)) {
+            for (int idx : buckets.get(f * keyCount + l)) {
                 String s = seqs[idx];
                 if (!passesNear(path, s, centers, r)) continue;
                 float[][] ideal = idealPath(s, centers);
@@ -104,7 +133,7 @@ public final class SwipeDecoder {
     private static List<Integer> nearKeys(float x, float y, float[][] centers, float radius) {
         List<Integer> out = new ArrayList<>();
         int best = -1; float bestD = Float.MAX_VALUE;
-        for (int c = 0; c < 26; c++) {
+        for (int c = 0; c < centers.length; c++) {
             if (centers[c] == null) continue;
             float dx = centers[c][0] - x, dy = centers[c][1] - y;
             float d = (float) Math.sqrt(dx * dx + dy * dy);
@@ -119,7 +148,7 @@ public final class SwipeDecoder {
         int j = 0;
         float r2 = r * r;
         for (int k = 1; k < s.length() - 1; k++) {
-            float[] c = centers[s.charAt(k) - 'a'];
+            float[] c = centers[s.charAt(k)];
             if (c == null) return false;
             boolean found = false;
             for (; j < path.length; j++) {
@@ -134,7 +163,7 @@ public final class SwipeDecoder {
     private static float[][] idealPath(String s, float[][] centers) {
         float[] xs = new float[s.length()], ys = new float[s.length()];
         for (int k = 0; k < s.length(); k++) {
-            float[] c = centers[s.charAt(k) - 'a'];
+            float[] c = centers[s.charAt(k)];
             if (c == null) return null;
             xs[k] = c[0]; ys[k] = c[1];
         }

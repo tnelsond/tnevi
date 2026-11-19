@@ -31,19 +31,21 @@ public final class VimKeyboardService extends InputMethodService
     public static final String PREFS = "settings";
     public static final String PREF_START_NORMAL = "start_normal";
     public static final String PREF_BLOCK_CURSOR = "block_cursor";
-    public static final String PREF_KHMER = "khmer";
+    public static final String PREF_LANGUAGE = "language";
     public static final String PREF_SWIPE = "swipe";
 
     public static final String PREF_PREDICT = "predict";
     private static final String PREF_HIST_EX = "history_ex", PREF_HIST_SEARCH = "history_search";
     private static final String SEP = "\u0001";
 
-    private volatile SwipeDecoder decoder;
-    private volatile LanguageModel lm;
+    /** English (built in) plus installed language packs; replaced when packs change. */
+    private volatile List<LanguagePacks.Language> languages;
+    private int langIndex;
+    private long packFingerprint;
+    private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
     /** What the suggestion bar shows: corrections for the last swiped word, or next-word predictions. */
     private static final int SUGGEST_NONE = 0, SUGGEST_ALTERNATIVES = 1, SUGGEST_PREDICTIONS = 2;
     private int suggestKind = SUGGEST_NONE;
-    private boolean khmer;
     /** The text inserted by the last gesture (leading space + word), for suggestion replacement. */
     private String lastGestureWord, lastGesturePrefix;
     private List<String> lastAlternatives;
@@ -64,24 +66,48 @@ public final class VimKeyboardService extends InputMethodService
         super.onCreate();
         engine = new VimEngine(this);
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-        khmer = prefs.getBoolean(PREF_KHMER, false);
         engine.setHistory(false, splitHistory(prefs.getString(PREF_HIST_EX, "")));
         engine.setHistory(true, splitHistory(prefs.getString(PREF_HIST_SEARCH, "")));
-        new Thread(new Runnable() {
-            @Override public void run() { loadDictionary(); }
-        }, "swipe-dict").start();
+        List<LanguagePacks.Language> builtIn = new ArrayList<>();
+        builtIn.add(new LanguagePacks.Language("en", "English"));
+        languages = builtIn;
+        reloadPacks();
     }
 
-    private void loadDictionary() {
-        try {
-            LanguageModel m = LanguageModel.load(getAssets().open("en_lm.bin"));
-            List<String> words = new ArrayList<>(m.size());
-            for (int i = 1; i < m.size(); i++) words.add(m.word(i));
-            decoder = new SwipeDecoder(words);
-            lm = m;
-        } catch (IOException | RuntimeException e) {
-            Log.e("VimKeyboard", "language model", e);
+    /** Loads language packs in the background and swaps them in on the main thread. */
+    private void reloadPacks() {
+        packFingerprint = LanguagePacks.fingerprint(this);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final List<LanguagePacks.Language> loaded = LanguagePacks.load(VimKeyboardService.this);
+                main.post(new Runnable() {
+                    @Override public void run() {
+                        languages = loaded;
+                        String want = getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_LANGUAGE, "en");
+                        langIndex = 0;
+                        for (int i = 0; i < loaded.size(); i++) if (loaded.get(i).id.equals(want)) langIndex = i;
+                        if (view != null) view.setLanguages(viewLanguages(), langIndex);
+                        updateUi();
+                    }
+                });
+            }
+        }, "language-packs").start();
+    }
+
+    private LanguagePacks.Language lang() {
+        List<LanguagePacks.Language> l = languages;
+        return l.get(Math.min(langIndex, l.size() - 1));
+    }
+
+    private List<VimKeyboardView.Lang> viewLanguages() {
+        boolean swipe = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_SWIPE, true);
+        List<VimKeyboardView.Lang> out = new ArrayList<>();
+        for (LanguagePacks.Language l : languages) {
+            VimKeyboardView.Lang v = new VimKeyboardView.Lang(l.id, l.name, l.layout);
+            v.swipe = swipe && l.decoder != null;
+            out.add(v);
         }
+        return out;
     }
 
     private static List<String> splitHistory(String s) {
@@ -110,7 +136,7 @@ public final class VimKeyboardService extends InputMethodService
     }
 
     @Override public View onCreateInputView() {
-        view = new VimKeyboardView(this, this, khmer);
+        view = new VimKeyboardView(this, this, viewLanguages(), langIndex);
         updateUi();
         return view;
     }
@@ -128,6 +154,8 @@ public final class VimKeyboardService extends InputMethodService
 
     @Override public void onStartInputView(EditorInfo ei, boolean restarting) {
         super.onStartInputView(ei, restarting);
+        if (LanguagePacks.fingerprint(this) != packFingerprint) reloadPacks();
+        else if (view != null) view.setLanguages(viewLanguages(), langIndex); // settings may have changed
         if (view != null) view.resetLayer();
         clearGesture();
         if (!passthrough) {
@@ -192,7 +220,7 @@ public final class VimKeyboardService extends InputMethodService
     @Override public void onKey(String key) {
         clearGesture();
         applyKey(key);
-        if (key.equals(" ")) showPredictions();
+        if (key.equals(" ") || key.equals("\u200B")) showPredictions();
     }
 
     private void applyKey(String key) {
@@ -222,23 +250,24 @@ public final class VimKeyboardService extends InputMethodService
     }
 
     @Override public void onGesture(float[] xs, float[] ys, int count, float[][] centers, float keyWidth, int caseMode) {
-        SwipeDecoder d = decoder;
-        final LanguageModel m = lm;
+        final LanguagePacks.Language L = lang();
+        SwipeDecoder d = L.decoder;
+        final LanguageModel m = L.lm;
         if (d == null || m == null || !getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_SWIPE, true)) return;
         InputConnection ic = getCurrentInputConnection();
         if (ic == null) return;
         // Context: the words before the cursor pick between similar swipes ("I'll see you" vs "I'll see toy").
-        final int[] ctx = m.contextOf(ic.getTextBeforeCursor(150, 0));
+        final int[] ctx = L.context(ic.getTextBeforeCursor(150, 0));
         List<String> results = d.decode(xs, ys, count, centers, keyWidth, 4, new SwipeDecoder.Scorer() {
             @Override public float cost(int index) { return m.cost(ctx[0], ctx[1], index + 1); }
         });
         if (results.isEmpty()) return;
-        if (caseMode == 0) {
+        if (caseMode == 0 && L.layout == null) {
             EditorInfo ei = getCurrentInputEditorInfo();
             if (ei != null && ic.getCursorCapsMode(ei.inputType) != 0) caseMode = 1;
         }
         List<String> cased = new ArrayList<>();
-        for (String w : results) cased.add(applyCase(w, caseMode));
+        for (String w : results) cased.add(L.layout == null ? applyCase(w, caseMode) : w);
         String word = cased.get(0);
         lastGesturePrefix = commitWord(ic, word);
         lastGestureWord = word;
@@ -247,14 +276,22 @@ public final class VimKeyboardService extends InputMethodService
         showAlternatives();
     }
 
-    /** Inserts a whole word, adding a space before it when it follows another word. Returns the prefix used. */
+    /**
+     * Inserts a whole word, separated from a preceding word: a space in English, a zero-width
+     * space in Khmer (the pack's separator; Khmer is written without visible spaces).
+     * Returns the prefix used.
+     */
     private String commitWord(InputConnection ic, String word) {
         CharSequence before = ic.getTextBeforeCursor(1, 0);
         String prefix = "";
         boolean inField = engine.getMode() == VimEngine.Mode.INSERT || engine.getMode() == VimEngine.Mode.REPLACE;
         if (inField && before != null && before.length() > 0) {
             char c = before.charAt(0);
-            if (!Character.isWhitespace(c) && "([{\"'\u201C\u2018/-@#".indexOf(c) < 0) prefix = " ";
+            boolean wordBefore = !Character.isWhitespace(c) && c != '\u200B' && "([{\"'\u201C\u2018/-@#«".indexOf(c) < 0;
+            if (wordBefore) {
+                boolean sameScript = lang().layout != null && Character.UnicodeBlock.of(c) == Character.UnicodeBlock.of(word.codePointAt(0));
+                prefix = sameScript ? lang().separator : " ";
+            }
         }
         applyKey(prefix + word);
         return prefix;
@@ -262,9 +299,10 @@ public final class VimKeyboardService extends InputMethodService
 
     /** Next-word predictions from the n-gram model, shown after a space (English, Insert mode). */
     private void showPredictions() {
-        LanguageModel m = lm;
+        LanguagePacks.Language L = lang();
+        LanguageModel m = L.lm;
         InputConnection ic = getCurrentInputConnection();
-        if (m == null || ic == null || view == null || khmer || passthrough) return;
+        if (m == null || ic == null || view == null || passthrough) return;
         if (engine.getMode() != VimEngine.Mode.INSERT) return;
         if (!getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_PREDICT, true)) return;
         EditorInfo ei = getCurrentInputEditorInfo();
@@ -277,10 +315,10 @@ public final class VimKeyboardService extends InputMethodService
                     || variation == InputType.TYPE_TEXT_VARIATION_URI
                     || variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS) return;
         }
-        int[] ctx = m.contextOf(ic.getTextBeforeCursor(150, 0));
-        boolean caps = ei != null && ic.getCursorCapsMode(ei.inputType) != 0;
+        int[] ctx = L.context(ic.getTextBeforeCursor(150, 0));
+        boolean caps = L.layout == null && ei != null && ic.getCursorCapsMode(ei.inputType) != 0;
         List<String> words = new ArrayList<>();
-        for (int id : m.predict(ctx[0], ctx[1], 3)) words.add(applyCase(m.word(id), caps ? 1 : 0));
+        for (int id : m.predict(ctx[0], ctx[1], 3)) words.add(L.layout == null ? applyCase(m.word(id), caps ? 1 : 0) : m.word(id));
         if (words.isEmpty()) return;
         lastAlternatives = words;
         lastGestureWord = null;
@@ -320,9 +358,9 @@ public final class VimKeyboardService extends InputMethodService
         showAlternatives();
     }
 
-    @Override public void onLanguageChanged(boolean k) {
-        khmer = k;
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_KHMER, k).apply();
+    @Override public void onLanguageChanged(int index) {
+        langIndex = index;
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(PREF_LANGUAGE, lang().id).apply();
         clearGesture();
     }
 
@@ -398,10 +436,10 @@ public final class VimKeyboardService extends InputMethodService
         if (passthrough || getCurrentInputConnection() == null || getCurrentInputEditorInfo() == null)
             return super.onKeyDown(keyCode, event);
         if (keyCode == KeyEvent.KEYCODE_SPACE && event.isCtrlPressed()) {
-            // Ctrl+Space switches English <-> Khmer.
-            khmer = !khmer;
-            if (view != null) view.setKhmer(khmer);
-            onLanguageChanged(khmer);
+            // Ctrl+Space cycles through the installed languages.
+            int next = (langIndex + 1) % languages.size();
+            if (view != null) view.setLanguage(next);
+            onLanguageChanged(next);
             consumedHardwareKeys.add(keyCode);
             updateUi();
             return true;
@@ -445,9 +483,10 @@ public final class VimKeyboardService extends InputMethodService
         int uc = ev.getUnicodeChar(ev.getMetaState());
         if (uc == 0 || (uc & KeyCharacterMap.COMBINING_ACCENT) != 0) return null;
         boolean textEntry = insert || engine.getMode() == VimEngine.Mode.CMDLINE;
-        if (khmer && textEntry && uc != ' ') {
-            String km = KhmerLayout.fromUs((char) uc);
-            if (km != null) return km;
+        Layout layout = lang().layout;
+        if (layout != null && textEntry && uc != ' ') {
+            String mapped = layout.hardware.get((char) uc);
+            if (mapped != null) return mapped;
         }
         return new String(Character.toChars(uc));
     }

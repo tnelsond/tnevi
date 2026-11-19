@@ -9,21 +9,27 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '17' }
-      - name: Engine unit tests
+      - name: Unit tests and swipe accuracy
         run: |
           mkdir -p /tmp/t
           D=app/src/main/java/dev/vimkeyboard
-          javac -d /tmp/t $D/VimEngine.java $D/SwipeDecoder.java $D/LanguageModel.java test/*.java
+          javac -d /tmp/t $D/VimEngine.java $D/SwipeDecoder.java $D/LanguageModel.java $D/Layout.java test/*.java
           java -cp /tmp/t VimEngineTest
-          java -cp /tmp/t SwipeContextTest app/src/main/assets/en_lm.bin test/lm_heldout.txt 0.07
+          for L in en km; do
+            java -cp /tmp/t SwipeContextTest packs/$L/assets/lm.bin test/lm_heldout_$L.txt packs/$L/assets/layout.txt 0.07
+          done
       - name: Build
         run: ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: VimKeyboard-debug
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            packs/*/build/outputs/apk/debug/*.apk
       - name: Attach APK to release (tags v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/debug/*.apk
+          files: |
+            app/build/outputs/apk/debug/*.apk
+            packs/*/build/outputs/apk/debug/*.apk

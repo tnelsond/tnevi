@@ -5,4 +5,6 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "VimKeyboard"
-include ':app'
+include ':app', ':pack-en', ':pack-km'
+project(':pack-en').projectDir = file('packs/en')
+project(':pack-km').projectDir = file('packs/km')

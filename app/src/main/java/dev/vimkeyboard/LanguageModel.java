@@ -170,6 +170,49 @@ public final class LanguageModel {
         return out;
     }
 
+    private int maxWordLength = -1;
+
+    /**
+     * Context for scripts written without spaces (Khmer): splits the text before the cursor into
+     * dictionary words from the right (longest match), stopping at sentence ends.
+     * Spaces and zero-width spaces are word breaks; anything else unknown gives no context.
+     */
+    public int[] contextOfUnspaced(CharSequence before, String sentenceEnds) {
+        if (maxWordLength < 0) {
+            int m = 1;
+            for (int i = 1; i < words.length; i++) m = Math.max(m, words[i].length());
+            maxWordLength = Math.min(m, 24);
+        }
+        String s = before == null ? "" : before.toString();
+        int pos = s.length();
+        int[] got = new int[2];
+        int found = 0;
+        boolean stopped = false;
+        while (pos > 0 && found < 2) {
+            char c = s.charAt(pos - 1);
+            if (sentenceEnds.indexOf(c) >= 0 || c == '\n') { got[found++] = 0; stopped = true; break; }
+            if (Character.isWhitespace(c) || c == '\u200B') { pos--; continue; }
+            int match = 0;
+            for (int len = Math.min(maxWordLength, pos); len > 0; len--) {
+                Integer id = ids.get(s.substring(pos - len, pos));
+                if (id != null) { got[found++] = id; match = len; break; }
+            }
+            if (match == 0) { got[found++] = -1; stopped = true; break; }
+            pos -= match;
+        }
+        if (found < 2 && !stopped && pos == 0) got[found++] = 0; // start of text
+        int[] ctx = new int[2];
+        ctx[1] = found > 0 ? got[0] : 0;
+        ctx[0] = found > 1 && got[0] > 0 ? got[1] : -1;
+        return ctx;
+    }
+
+    /** Context for the given layout (segmenting scripts without spaces). */
+    public int[] contextOf(CharSequence before, Layout layout) {
+        if (layout != null && layout.segment) return contextOfUnspaced(before, layout.sentenceEnds);
+        return contextOf(before);
+    }
+
     private static final Pattern TOKEN = Pattern.compile("[A-Za-z]+(?:'[A-Za-z]+)?|[.!?\\n]");
 
     /**

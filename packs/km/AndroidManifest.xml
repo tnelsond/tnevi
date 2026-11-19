@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A tnevi language pack: assets only (layout.txt, lm.bin). No code, no components, no permissions. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="@string/app_name"
+        android:icon="@drawable/ic_launcher"
+        android:hasCode="false"
+        android:allowBackup="false" />
+</manifest>

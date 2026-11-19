@@ -28,17 +28,25 @@ import java.util.Set;
 
 /**
  * Soft keyboard built in code: vim mode indicator, command strip, English (QWERTY) and
- * Khmer (NiDA) layers, long-press extras, and swipe (gesture) typing for English.
+ * language-pack layers (e.g. Khmer), long-press extras, and swipe (gesture) typing.
  */
 @SuppressLint("ViewConstructor")
 public final class VimKeyboardView extends LinearLayout {
+
+    /** A language as the keyboard view sees it: a name and an optional pack layout (null = QWERTY). */
+    public static final class Lang {
+        public final String id, name;
+        public final Layout layout;
+        public boolean swipe;
+        public Lang(String id, String name, Layout layout) { this.id = id; this.name = name; this.layout = layout; }
+    }
 
     public interface Listener {
         void onKey(String key);
         void onLongPressSpace();
         void onGesture(float[] xs, float[] ys, int count, float[][] centers, float keyWidth, int caseMode);
         void onPickSuggestion(String word);
-        void onLanguageChanged(boolean khmer);
+        void onLanguageChanged(int index);
         /** Mode badge tapped: switch between Insert and Normal (command) mode. */
         void onModeToggle();
     }
@@ -47,7 +55,7 @@ public final class VimKeyboardView extends LinearLayout {
             KEY_SPECIAL = 0xFF20232A, TEXT = 0xFFE9EAEE, TEXT_DIM = 0xFF9AA0AD, HINT = 0xFF7C8394,
             ACCENT_ON = 0xFF3B82F6, TRAIL = 0xCC4ADE80;
 
-    /** Row heights (dp). Khmer has 4 letter rows and no number row: same total height as English. */
+    /** Row heights (dp). Pack layouts without a number row share the same total height. */
     private static final int NUM_H = 46, ROW_H = 54, KM_H = (NUM_H + 3 * ROW_H) / 4;
 
     private static final String SHIFT = "SHIFT", SYM = "SYM", CTRL = "CTRL", LANG = "LANG";
@@ -59,6 +67,8 @@ public final class VimKeyboardView extends LinearLayout {
         final String base, shifted;
         final String[] alts;
         final boolean letter;
+        /** Key index for swipe typing (QWERTY: a-z = 0-25; pack layouts: row-major), -1 = not swipeable. */
+        int swipeIndex = -1;
         Spec(String base, String shifted, String alt, boolean letter) {
             this(base, shifted, alt == null || alt.isEmpty() ? new String[0] : new String[]{alt}, letter);
         }
@@ -112,7 +122,9 @@ public final class VimKeyboardView extends LinearLayout {
     private final List<TextView> charKeys = new ArrayList<>();
     private TextView shiftKey, ctrlKey, langKey, spaceKey;
 
-    private boolean khmer, symbols, shift, capsLock, ctrl;
+    private final List<Lang> langs = new ArrayList<>();
+    private int lang;
+    private boolean symbols, shift, capsLock, ctrl;
     private boolean insertLike = true, textEntry = true;
     private long lastShiftTap;
 
@@ -127,10 +139,11 @@ public final class VimKeyboardView extends LinearLayout {
     private final Paint trailPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final int[] loc = new int[2];
 
-    public VimKeyboardView(Context ctx, Listener listener, boolean khmer) {
+    public VimKeyboardView(Context ctx, Listener listener, List<Lang> languages, int current) {
         super(ctx);
         this.listener = listener;
-        this.khmer = khmer;
+        langs.addAll(languages);
+        lang = Math.max(0, Math.min(current, langs.size() - 1));
         this.dp = ctx.getResources().getDisplayMetrics().density;
         setOrientation(VERTICAL);
         setBackgroundColor(BG);
@@ -198,7 +211,12 @@ public final class VimKeyboardView extends LinearLayout {
         r.addView(new View(getContext()), new LayoutParams(0, LayoutParams.MATCH_PARENT, w));
     }
 
-    private boolean khmerActive() { return khmer && textEntry && !symbols; }
+    private Lang cur() { return langs.get(lang); }
+
+    /** The current pack layout, when typing text in a language that has one (null = QWERTY). */
+    private Layout packLayout() { return textEntry ? cur().layout : null; }
+
+    private boolean packLettersActive() { return packLayout() != null && packLayout().letters != null && !symbols; }
 
     private void buildKeys() {
         keyRows.removeAllViews();
@@ -206,15 +224,17 @@ public final class VimKeyboardView extends LinearLayout {
         ctrlKey = null;
         shiftKey = null;
 
-        if (symbols && khmer && textEntry) {
-            for (int r = 0; r < 4; r++) {
-                LinearLayout row = row(KM_H);
-                for (int i = 0; i < KhmerLayout.SYMBOLS[r].length; i++) {
-                    String[] e = KhmerLayout.SYMBOLS[r][i];
-                    if (r == 0) row.addView(numberKey(e[0], null, i));
+        if (symbols && packLayout() != null && packLayout().symbols != null) {
+            List<List<String[]>> rows = packLayout().symbols;
+            int h = (NUM_H + 3 * ROW_H) / rows.size();
+            for (int r = 0; r < rows.size(); r++) {
+                LinearLayout row = row(h);
+                for (int i = 0; i < rows.get(r).size(); i++) {
+                    String[] e = rows.get(r).get(i);
+                    if (r == 0 && i < 10) row.addView(numberKey(e[0], null, i));
                     else row.addView(charKey(Spec.of(e), 1f));
                 }
-                if (r == 3) row.addView(codeKey("\u232B", "<BS>", 1.4f, true));
+                if (r == rows.size() - 1) row.addView(codeKey("\u232B", "<BS>", 1.4f, true));
                 keyRows.addView(row);
             }
         } else if (symbols) {
@@ -228,12 +248,20 @@ public final class VimKeyboardView extends LinearLayout {
                 if (i == 2) r.addView(codeKey("⌫", "<BS>", 1.5f, true));
                 keyRows.addView(r);
             }
-        } else if (khmerActive()) {
-            for (int r = 0; r < 4; r++) {
-                LinearLayout row = row(KM_H);
-                if (r == 3) { shiftKey = codeKey("\u21E7", SHIFT, 1.35f, true); row.addView(shiftKey); }
-                for (String[] e : KhmerLayout.PHONE[r]) row.addView(charKey(Spec.of(e), 1f));
-                if (r == 3) row.addView(codeKey("\u232B", "<BS>", 1.35f, true));
+        } else if (packLettersActive()) {
+            List<List<String[]>> rows = packLayout().letters;
+            int[][] swipe = packLayout().swipeIndices();
+            int h = (NUM_H + 3 * ROW_H) / rows.size();   // same total height as QWERTY + number row
+            for (int r = 0; r < rows.size(); r++) {
+                LinearLayout row = row(h);
+                boolean last = r == rows.size() - 1;
+                if (last) { shiftKey = codeKey("\u21E7", SHIFT, 1.35f, true); row.addView(shiftKey); }
+                for (int i = 0; i < rows.get(r).size(); i++) {
+                    Spec sp = Spec.of(rows.get(r).get(i));
+                    sp.swipeIndex = swipe[r][i];
+                    row.addView(charKey(sp, 1f));
+                }
+                if (last) row.addView(codeKey("\u232B", "<BS>", 1.35f, true));
                 keyRows.addView(row);
             }
         } else {
@@ -272,7 +300,7 @@ public final class VimKeyboardView extends LinearLayout {
 
     private String spaceLabel() {
         if (!textEntry) return "space";
-        return khmerActive() ? "◂ ខ្មែរ ▸" : "◂ English ▸";
+        return langs.size() > 1 ? "\u25C2 " + cur().name + " \u25B8" : cur().name;
     }
 
     private static String s(char c) { return String.valueOf(c); }
@@ -307,7 +335,9 @@ public final class VimKeyboardView extends LinearLayout {
         if ((i = EN_TOP.indexOf(c)) >= 0) alt = s(EN_TOP_ALT.charAt(i));
         else if ((i = EN_MID.indexOf(c)) >= 0) alt = s(EN_MID_ALT.charAt(i));
         else if ((i = EN_BOT.indexOf(c)) >= 0) alt = s(EN_BOT_ALT.charAt(i));
-        return charKey(new Spec(s(c), s(Character.toUpperCase(c)), alt, true), 1f);
+        Spec sp = new Spec(s(c), s(Character.toUpperCase(c)), alt, true);
+        sp.swipeIndex = c - 'a';
+        return charKey(sp, 1f);
     }
 
     private static GradientDrawable rounded(int color, float radius) {
@@ -352,18 +382,17 @@ public final class VimKeyboardView extends LinearLayout {
 
     private void refreshLabels() {
         boolean upper = shift || capsLock;
-        boolean km = khmerActive();
-        boolean kmText = khmer && textEntry;
+        boolean kmText = packLayout() != null;
         for (TextView t : charKeys) {
             Spec sp = (Spec) t.getTag();
             boolean useShift = upper && sp.shifted != null;
             String main = useShift ? sp.shifted : sp.base;
-            String label = kmText ? KhmerLayout.label(main) : main;
+            String label = kmText ? Layout.label(main) : main;
             StringBuilder hint = new StringBuilder();
             for (String a : sp.alts) {
                 if (a.equals(main)) continue;
                 if (hint.length() > 0) hint.append(',');
-                hint.append(kmText && sp.alts.length == 1 && !a.startsWith("<") && !a.equals(CTRL) ? KhmerLayout.label(a) : altLabel(a));
+                hint.append(kmText && sp.alts.length == 1 && !a.startsWith("<") && !a.equals(CTRL) ? Layout.label(a) : altLabel(a));
             }
             if (useShift && sp.alts.length == 1) hint.setLength(0);
             t.setText(label);
@@ -376,7 +405,6 @@ public final class VimKeyboardView extends LinearLayout {
         }
         if (ctrlKey != null) ctrlKey.setSelected(ctrl);
         if (modeBadge != null && modeLabel != null) modeBadge.setText(ctrl ? modeLabel + " \u2303" : modeLabel);
-        if (langKey != null) langKey.setText(khmer ? "EN" : "ខ្មែរ");
         if (spaceKey != null) spaceKey.setText(spaceLabel());
     }
 
@@ -503,9 +531,11 @@ public final class VimKeyboardView extends LinearLayout {
                     @Override public void run() {
                         longFired = true;
                         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                        showOptions(new String[]{"EN", "KM", "IME"},
-                                new String[]{"English", "\u1781\u17D2\u1798\u17C2\u179A", "\u2328 more"},
-                                px(92), 17, khmer ? 1 : 0);
+                        String[] ids = new String[langs.size() + 1], names = new String[langs.size() + 1];
+                        for (int i = 0; i < langs.size(); i++) { ids[i] = "L" + i; names[i] = langs.get(i).name; }
+                        ids[langs.size()] = "IME";
+                        names[langs.size()] = "\u2328 more";
+                        showOptions(ids, names, px(92), 17, lang);
                     }
                 };
                 handler.postDelayed(longPress, 500);
@@ -527,7 +557,7 @@ public final class VimKeyboardView extends LinearLayout {
         }
         if (downKind != DOWN_CHAR) return;
         if (popup != null) { selectOption(x); return; }
-        boolean canSwipe = insertLike && downSpec.letter && !khmerActive() && !symbols && !ctrl;
+        boolean canSwipe = insertLike && downSpec.swipeIndex >= 0 && cur().swipe && !symbols && !ctrl;
         if (!canSwipe) return;
         gesture.add(new float[]{x, y});
         if (!swiping) {
@@ -550,7 +580,7 @@ public final class VimKeyboardView extends LinearLayout {
                 String pick = popupSel >= 0 ? popupOptions[popupSel] : null;
                 dismissOptions();
                 if ("IME".equals(pick)) listener.onLongPressSpace();
-                else if (pick != null && pick.equals("KM") != khmer) toggleLanguage();
+                else if (pick != null && pick.startsWith("L")) selectLanguage(Integer.parseInt(pick.substring(1)));
             } else if (!fired) send(" ", true);
         }
         else if (kind == DOWN_CHAR) {
@@ -601,7 +631,7 @@ public final class VimKeyboardView extends LinearLayout {
         if (tag instanceof Spec) {
             Spec sp = (Spec) tag;
             String main = (shift || capsLock) && sp.shifted != null ? sp.shifted : sp.base;
-            label = khmer && textEntry ? KhmerLayout.label(main) : main;
+            label = packLayout() != null ? Layout.label(main) : main;
         } else {
             label = ((TextView) key).getText().toString();
             if (label.length() != 1 || ((String) tag).startsWith("<")) { hidePreview(); return; }
@@ -620,7 +650,7 @@ public final class VimKeyboardView extends LinearLayout {
             preview.setAnimationStyle(0);
         }
         previewText.setText(label);
-        previewText.setTextSize(TypedValue.COMPLEX_UNIT_SP, khmer && textEntry ? 32 : 30);
+        previewText.setTextSize(TypedValue.COMPLEX_UNIT_SP, packLayout() != null ? 32 : 30);
         previewText.setPadding(0, px(6), 0, 0);
         key.getLocationInWindow(loc);
         int x = loc[0] - (w - key.getWidth()) / 2;
@@ -649,9 +679,9 @@ public final class VimKeyboardView extends LinearLayout {
     private View downView;
 
     private void showOptions(Spec sp) {
-        boolean km = khmer && textEntry;
+        boolean km = packLayout() != null;
         String[] labels = new String[sp.alts.length];
-        for (int i = 0; i < labels.length; i++) labels[i] = km ? KhmerLayout.label(sp.alts[i]) : sp.alts[i];
+        for (int i = 0; i < labels.length; i++) labels[i] = km ? Layout.label(sp.alts[i]) : sp.alts[i];
         View anchor = downView;
         if (anchor == null) return;
         showOptions(sp.alts, labels, Math.max(anchor.getWidth(), px(40)), 22, -1);
@@ -720,13 +750,15 @@ public final class VimKeyboardView extends LinearLayout {
     }
 
     private void finishGesture() {
-        float[][] centers = new float[26][];
+        int k = 0;
+        for (TextView t : charKeys) k = Math.max(k, ((Spec) t.getTag()).swipeIndex + 1);
+        float[][] centers = new float[k][];
         float keyW = 0;
         for (TextView t : charKeys) {
             Spec sp = (Spec) t.getTag();
-            if (!sp.letter) continue;
+            if (sp.swipeIndex < 0) continue;
             t.getLocationOnScreen(loc);
-            centers[sp.base.charAt(0) - 'a'] = new float[]{loc[0] + t.getWidth() / 2f, loc[1] + t.getHeight() / 2f};
+            centers[sp.swipeIndex] = new float[]{loc[0] + t.getWidth() / 2f, loc[1] + t.getHeight() / 2f};
             keyW = Math.max(keyW, t.getWidth() + px(4));
         }
         int n = gesture.size();
@@ -738,12 +770,17 @@ public final class VimKeyboardView extends LinearLayout {
     }
 
     private void toggleLanguage() {
-        khmer = !khmer;
+        if (langs.size() > 1) selectLanguage((lang + 1) % langs.size());
+    }
+
+    private void selectLanguage(int index) {
+        if (index == lang || index < 0 || index >= langs.size()) return;
+        lang = index;
         shift = false;
         capsLock = false;
         symbols = false;
         buildKeys();
-        listener.onLanguageChanged(khmer);
+        listener.onLanguageChanged(lang);
     }
 
     @Override protected void dispatchDraw(Canvas canvas) {
@@ -769,11 +806,17 @@ public final class VimKeyboardView extends LinearLayout {
         if (rebuild) buildKeys(); else refreshLabels();
     }
 
-    public boolean isKhmer() { return khmer; }
+    /** Replaces the language list (e.g. after a language pack is installed or removed). */
+    public void setLanguages(List<Lang> languages, int current) {
+        langs.clear();
+        langs.addAll(languages);
+        lang = Math.max(0, Math.min(current, langs.size() - 1));
+        buildKeys();
+    }
 
-    public void setKhmer(boolean k) {
-        if (k == khmer) return;
-        khmer = k;
+    public void setLanguage(int index) {
+        if (index == lang || index < 0 || index >= langs.size()) return;
+        lang = index;
         buildKeys();
     }
 
@@ -789,7 +832,7 @@ public final class VimKeyboardView extends LinearLayout {
         statusText.setText(status == null ? "" : status);
         if (textEntry != this.textEntry) {
             this.textEntry = textEntry;
-            if (khmer) buildKeys(); else refreshLabels();
+            if (cur().layout != null) buildKeys(); else refreshLabels();
         }
         if (!insertLike) setSuggestions(null);
     }

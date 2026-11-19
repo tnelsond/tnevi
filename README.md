@@ -5,9 +5,21 @@ Normal, Insert, Replace, Visual, Visual-line and `:` command-line modes.
 
 ## Install
 
-1. Install `VimKeyboard.apk` (allow "install unknown apps" for your browser/file manager).
+tnevi is split into small apps so the keyboard itself stays tiny and offline:
+
+| APK | What it is | Size |
+|---|---|---|
+| `tnevi.apk` | the keyboard: vi editing, English QWERTY layout | 74 KB |
+| `tnevi-pack-en.apk` | English swipe typing + next-word suggestions | 2.8 MB |
+| `tnevi-pack-km.apk` | Khmer keyboard (Gboard ដើម layout) with swipe + suggestions | 4.6 MB |
+
+1. Install `tnevi.apk`, plus any packs you want. Your browser or file manager needs permission to install unknown apps.
 2. Open **Vim Keyboard** → tap **Enable Vim Keyboard** → turn it on.
 3. Tap **Switch to Vim Keyboard** (or long-press the space bar later to switch keyboards).
+
+The setup screen lists which language packs are installed. Packs are picked up automatically the next time a text field opens.
+
+**No internet:** none of the apps request any permission, including INTERNET, so Android won't let them open a network connection. Packs contain only data (`hasCode="false"`: no code, no components). The keyboard reads them with `createPackageContext()`, and only accepts packs signed with the same key as itself. Another app can't pose as a pack.
 
 Fields start in **Insert** mode so it works as a normal keyboard. Tap the **mode badge** (top left: INSERT / NORMAL …) to switch between Insert and Normal mode. `Ctrl-[` and `Ctrl-c` also work as Esc.
 The setup screen has a toggle to start every field in Normal mode.
@@ -31,7 +43,7 @@ The setup screen has a toggle to start every field in Normal mode.
 - Hardware keyboards work too (Esc, Ctrl-[, all vi keys).
 - Terminal apps (fields with no text model, e.g. Termux) get raw keys: esc, ctrl-x, enter, backspace.
 
-## Khmer keyboard
+## Khmer keyboard (Khmer pack)
 
 - Layout: Gboard's Khmer **ដើម** phone layout. It has 4 rows of 10 keys:
   - `ក ខ គ ឃ ង ច ឆ ជ ឈ ញ`
@@ -40,7 +52,7 @@ The setup screen has a toggle to start every field in Normal mode.
   - `⇧ ស ហ ឡ អ ◌់ ◌៉ ◌៊ ◌័ ។ ›|‹ ⌫`
 - The small character in a key's corner is its second character.
   - **⇧** types it.
-  - **Long-press** types it straight away. On keys with 2 choices (ឥ,ឦ · ឧ,ឩ · ឪ,ឳ · ឱ,ឲ) long-press opens a popup; slide to your choice and let go.
+  - **Long-press** types it straight away. On keys with 2 choices (ឥ,ឦ · ឧ,ឩ · ឪ,ឳ · ឱ,ឲ, plus ◌៌,◌៎ and ◌៍,◌៏) long-press opens a popup; slide to your choice and let go.
 - **›|‹** types a zero-width space (an invisible word break).
 - **?123** in Khmer shows:
   - Khmer digits ១–០
@@ -53,9 +65,9 @@ The setup screen has a toggle to start every field in Normal mode.
 
 ### Switching language
 
-- **Long-press space** to open a menu with **English**, **ខ្មែរ** and **⌨ more** (the system keyboard picker). Slide to one and let go.
-- Or slide left/right on the space bar to flip between English and Khmer.
-- On a hardware keyboard, **Ctrl+Space** switches.
+- **Long-press space** to open a menu of the installed languages plus **⌨ more** (the system keyboard picker). Slide to one and let go.
+- Or slide left/right on the space bar to go to the next language.
+- On a hardware keyboard, **Ctrl+Space** cycles languages.
 
 The keyboard remembers your last choice.
 
@@ -64,31 +76,28 @@ The keyboard remembers your last choice.
 In Insert mode, backspace removes one component at a time, like Gboard: ខ្មែ → ខ្ម → ខ្ → ខ.
 In Normal mode, `x`, `h` and `l` still treat a whole cluster as one character.
 
-## Swipe typing and next-word suggestions (English)
+## Swipe typing and next-word suggestions (English and Khmer packs)
 
-- Slide your finger across the letters without lifting. A green trail follows your finger, and the word is typed with a space before it when needed.
-- **Context:** the decoder looks at the 1–2 words before the cursor (an n-gram language model), so "I'll see you" beats "I'll see toy", and "the United" suggests "States".
+- Slide your finger across the letters without lifting. A green trail follows your finger.
+- **Word breaks:** English words get a space before them when needed. Khmer words get a zero-width space instead, the standard invisible break that Khmer uses in place of visible spaces.
+- **Khmer swipes** follow typing order through the ដើម keys, including ◌្ for subscripts. For example, ខ្មែរ is ខ → ◌្ → ម → ◌ែ (on ព) → រ. Shifted characters belong to their key, so ែ is swiped through the ព key.
+- **Context:** the decoder looks at the 1–2 words before the cursor (an n-gram language model). So "I'll see you" beats "I'll see toy", and "the United" suggests "States". Khmer text has no spaces, so the words before the cursor are found by splitting the text with the pack's dictionary.
 - Up to 3 alternatives appear in the status bar; tap one to replace the word.
-- **Next-word suggestions:** after you type a space, the bar shows 3 likely next words. Tap one to insert it, and the next 3 appear.
-- Shift or caps lock capitalises the swiped word. Words at the start of a sentence are capitalised in fields that ask for it.
-- **Vocabulary:** 40,000 English words, checked against a spelling dictionary. That leaves out:
-  - acronyms like tv, usa, bbc and lol
-  - abbreviations like etc., govt and Oct
-  - web tokens like http
-  - stray 1–2 letter fragments
-
-  Proper nouns keep their capitals (London, David). Contractions are included (don't, I'm, it's).
-- **Measured accuracy** (`test/SwipeContextTest.java`: 4,000 words from held-out sentences, simulated gestures, same vocabulary for both rows):
+- **Next-word suggestions:** after a space (or ›|‹ in Khmer), the bar shows 3 likely next words. Tap one to insert it, and the next 3 appear.
+- Shift or caps lock capitalises a swiped English word. English words at the start of a sentence are capitalised in fields that ask for it.
+- **English vocabulary:** 40,000 words, checked against a spelling dictionary. That leaves out acronyms (tv, usa, lol), abbreviations (govt, Oct), web tokens (http) and stray 1–2 letter fragments. Proper nouns keep their capitals; contractions are included.
+- **Khmer vocabulary:** 23,655 words from about 37 million words of segmented Khmer Wikipedia and web text. Words must be well-formed and typeable on the layout, and must appear in the SIL Khmer word lists unless common in the text. Buddhist scripture, which makes up much of the web text, is filtered out so suggestions reflect everyday Khmer.
+- **Measured accuracy** (`test/SwipeContextTest.java`: 4,000 words from held-out sentences, simulated gestures, n-gram context on):
 
   | | first guess right | right word in top 3 |
   |---|---|---|
-  | careful swipes, frequency only (v1.9) | 91.9% | 98.0% |
-  | careful swipes, n-gram context (v2.0) | 93.3% | 98.7% |
-  | sloppy swipes, frequency only (v1.9) | 74.0% | 83.5% |
-  | sloppy swipes, n-gram context (v2.0) | 84.2% | 92.8% |
+  | English, careful swipes | 93.5% | 98.6% |
+  | English, sloppy swipes | 84.3% | 93.4% |
+  | Khmer, careful swipes | 95.9% | 99.4% |
+  | Khmer, sloppy swipes | 87.7% | 93.9% |
 
-- Swipe and suggestions are English only; Khmer is tap-typing. Both can be turned off on the setup screen.
-- Suggestions don't appear in password, email or URL fields.
+  Without context (frequency only) the first guess is 91.2% / 79.7% for English and 93.1% / 81.2% for Khmer.
+- Swipe and suggestions can be turned off on the setup screen. Suggestions don't appear in password, email or URL fields.
 
 ## Supported commands
 
@@ -112,30 +121,43 @@ Indent (`>`/`<`) uses 4 spaces.
 
 ## Building
 
-The APK was built with the plain SDK command-line tools:
-
 ```sh
-./build.sh          # runs engine tests, then aapt → javac → dx/d8 → zipalign → apksigner
+./build.sh   # engine tests, swipe accuracy tests, then build/tnevi.apk and build/tnevi-pack-{en,km}.apk
 ```
 
-On Debian/Ubuntu: `apt install aapt dalvik-exchange zipalign apksigner android-sdk-platform-23`.
+It uses the plain SDK command-line tools. On Debian/Ubuntu: `apt install aapt dalvik-exchange zipalign apksigner android-sdk-platform-23`.
+All 3 APKs are signed with `debug.keystore`, which is created on first build and kept out of git.
 
-It is also a normal Gradle project: open it in Android Studio, or run `./gradlew assembleDebug`.
-Pushing to GitHub builds the APK via `.github/workflows/build.yml`.
+It is also a Gradle project with modules `:app`, `:pack-en` and `:pack-km`: `./gradlew assembleDebug`.
+Pushing to GitHub builds all three (`.github/workflows/build.yml`). Tagging `v*` attaches them to a release.
+CI builds are signed with GitHub's per-run debug key, so install the keyboard and its packs from the **same** run.
+They won't upgrade an install signed with a different key.
+
+Rebuilding the language data (`packs/*/assets/lm.bin`) is described at the top of `tools/build_lm.py`.
 
 ## Code
 
-- `VimEngine.java` — the vi emulator. Pure Java (no Android imports), edits through a small `Host` interface.
-- `VimKeyboardService.java` — the `InputMethodService`; maps engine edits onto the `InputConnection`,
-  syncs the cursor when you tap the field, handles hardware keys and terminal pass-through.
-- `VimKeyboardView.java` — the soft keyboard (English/Khmer layers, long-press, swipe trail, suggestions).
-- `KhmerLayout.java` — the NiDA Khmer layout table (also used for hardware keyboards).
-- `SwipeDecoder.java` — gesture decoder (pure Java).
-- `LanguageModel.java` — loads `assets/en_lm.bin` (vocabulary, unigram/bigram/trigram costs) and predicts next words.
-- `tools/build_lm.py` — rebuilds `en_lm.bin` from wordfreq, a spelling dictionary and the NLTK corpora (see the script header).
-- `MainActivity.java` — setup screen, settings, practice field and cheat sheet.
-- `test/SwipeContextTest.java` — swipe accuracy with/without context on held-out sentences (`test/lm_heldout.txt`).
-- `test/VimEngineTest.java` — 168 behaviour tests (`java VimEngineTest`, no Android needed).
+- `VimEngine.java`: the vi emulator. Pure Java (no Android imports), edits through a small `Host` interface.
+- `VimKeyboardService.java`: the `InputMethodService`.
+  - Maps engine edits onto the `InputConnection`.
+  - Syncs the cursor when you tap the field.
+  - Handles hardware keys, terminal pass-through, swipe and suggestions.
+- `VimKeyboardView.java`: the soft keyboard: QWERTY, pack layouts, long-press, previews, swipe trail, suggestions.
+- `LanguagePacks.java`: finds installed packs, checks their signature and loads them.
+- `Layout.java`: parses a pack's `layout.txt` (rows, long-press options, hardware map) and maps words to swipe key paths.
+- `SwipeDecoder.java`: the gesture decoder, for any key layout (pure Java).
+- `LanguageModel.java`: loads `lm.bin` (vocabulary plus unigram/bigram/trigram costs), predicts next words and finds context, including dictionary segmentation for Khmer.
+- `MainActivity.java`: setup screen, settings, pack status, practice field and cheat sheet.
+- `packs/en`, `packs/km`: language packs (`AndroidManifest.xml`, `assets/layout.txt`, `assets/lm.bin`).
+- `tools/build_lm.py`: builds a pack's `lm.bin` and held-out test sentences.
+- `test/VimEngineTest.java`: 168 behaviour tests (`java VimEngineTest`, no Android needed).
+- `test/SwipeContextTest.java`: swipe accuracy with and without context on held-out sentences.
+
+### Adding a language
+
+1. Create `packs/<id>/` like `packs/km`, with a `layout.txt` (format at the top of `Layout.java`).
+2. Build `lm.bin` with a new function in `tools/build_lm.py`.
+3. Add the package name to `LanguagePacks.PACKAGES` and to `<queries>` in the keyboard's manifest.
 
 ## Known limitations
 
@@ -147,11 +169,13 @@ Pushing to GitHub builds the APK via `.github/workflows/build.yml`.
 
 ## Data and licences
 
-The code is CC0 (see `LICENSE`). `app/src/main/assets/en_lm.bin` is derived from third-party data:
+The code is CC0 (see `LICENSE`). The pack data files (`packs/*/assets/lm.bin`) are derived from third-party data.
+They contain only vocabulary and aggregate n-gram statistics, not the source texts:
 
-- [wordfreq](https://github.com/rspeer/wordfreq) word frequencies (CC BY-SA 4.0): vocabulary and unigram probabilities.
-- The `wamerican-large` spelling list (SCOWL, permissive licence): filters out acronyms and junk.
-- [NLTK corpora](https://www.nltk.org/nltk_data/) for bigram/trigram counts: Brown, Reuters-21578, webtext, NPS Chat,
-  Gutenberg selections, movie reviews and ABC. Several of these are licensed for research or non-commercial use only.
-
-Only aggregate n-gram statistics are shipped, not the texts.
+- English
+  - [wordfreq](https://github.com/rspeer/wordfreq) word frequencies (CC BY-SA 4.0)
+  - the `wamerican-large` spelling list (SCOWL)
+  - [NLTK corpora](https://www.nltk.org/nltk_data/): Brown, Reuters-21578, webtext, NPS Chat, Gutenberg selections, movie reviews, ABC. Several are licensed for research or non-commercial use only.
+- Khmer
+  - word-segmented Khmer Wikipedia (CC BY-SA) and OSCAR web text (Common Crawl derived), from [phylypo/khmer-text-data](https://github.com/phylypo/khmer-text-data)
+  - [SIL Khmer line-breaking word lists](https://github.com/silnrsi/khmerlbdict) (MIT)

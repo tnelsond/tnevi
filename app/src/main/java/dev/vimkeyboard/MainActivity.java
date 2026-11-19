@@ -23,7 +23,7 @@ import android.widget.TextView;
 /** Setup screen: enable/select the keyboard, settings, a practice field and a cheat sheet. */
 public final class MainActivity extends Activity {
 
-    private TextView status;
+    private TextView status, packs;
     private float dp;
 
     private static final String CHEAT =
@@ -41,11 +41,11 @@ public final class MainActivity extends Activity {
             "LONG-PRESS 1 ctrl  2 \u2191  3 redo  4 \u2193  9 `  0 \\   . ! ?\n" +
             "HISTORY   \u2191 in Normal opens : with the last command; \u2191 \u2193 in : and / browse history\n" +
             "          q-p % ^ ~ | [ ] < > { }   a-l @ # & * - + = ( )   z-m _ $ \" ' : ; /\n" +
-            "LANGUAGE  long-press space: English / \u1781\u17D2\u1798\u17C2\u179A / other keyboards;\n" +
+            "LANGUAGE  long-press space: installed languages / other keyboards;\n" +
             "          or slide on space, or Ctrl+Space (hardware)\n" +
-            "          Khmer (NiDA): \u21E7 for second row of letters, long-press for extras\n" +
+            "          Khmer pack: \u21E7 for the corner character, long-press for extras\n" +
             "          command modes always show English keys\n" +
-            "SWIPE     slide across English letters; tap a suggestion to fix the word\n" +
+            "SWIPE     slide across the letters (English and Khmer packs); tap a suggestion to fix the word\n" +
             "          terminal apps get raw keys (Esc, Ctrl-x, arrows not remapped)";
 
     @Override protected void onCreate(Bundle b) {
@@ -95,8 +95,18 @@ public final class MainActivity extends Activity {
         col.addView(toggle("Block cursor in Normal mode (selects the character under the cursor)",
                 VimKeyboardService.PREF_BLOCK_CURSOR, true, prefs));
 
-        col.addView(toggle("Swipe typing (English)", VimKeyboardService.PREF_SWIPE, true, prefs));
-        col.addView(toggle("Next-word suggestions (English)", VimKeyboardService.PREF_PREDICT, true, prefs));
+        col.addView(toggle("Swipe typing", VimKeyboardService.PREF_SWIPE, true, prefs));
+        col.addView(toggle("Next-word suggestions", VimKeyboardService.PREF_PREDICT, true, prefs));
+
+        TextView packsTitle = text("Language packs", 17);
+        packsTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        packsTitle.setPadding(0, px(16), 0, px(4));
+        col.addView(packsTitle);
+        col.addView(text("Installed separately; they contain only data (no code, no permissions). "
+                + "The keyboard itself has no internet access.", 13));
+        packs = text("", 15);
+        packs.setPadding(0, px(6), 0, 0);
+        col.addView(packs);
 
         TextView tryIt = text("Practice here:", 15);
         tryIt.setPadding(0, px(16), 0, px(4));
@@ -138,6 +148,15 @@ public final class MainActivity extends Activity {
     }
 
     private void refreshStatus() {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < LanguagePacks.PACKAGES.length; i++) {
+            LanguagePacks.Status st = LanguagePacks.status(this, LanguagePacks.PACKAGES[i]);
+            sb.append(st == LanguagePacks.Status.INSTALLED ? "\u2713 " : "\u2717 ").append(LanguagePacks.PACK_NAMES[i]);
+            if (st == LanguagePacks.Status.WRONG_SIGNATURE) sb.append("  (signed with a different key: ignored)");
+            if (st == LanguagePacks.Status.NOT_INSTALLED) sb.append("  (not installed)");
+            sb.append('\n');
+        }
+        packs.setText(sb.toString().trim());
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         boolean enabled = false;
         if (imm != null) for (InputMethodInfo info : imm.getEnabledInputMethodList())

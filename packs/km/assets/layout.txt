@@ -1,0 +1,111 @@
+# tnevi keyboard layout: Khmer (Gboard ដើម phone layout).
+# [letters] and [symbols]: one row per line, keys separated by TAB.
+# A key is: main output, then long-press/shift options, separated by single spaces.
+# \uXXXX escapes are allowed. [hardware]: US-keyboard character, TAB, output (NiDA layout).
+name=ខ្មែរ
+separator=\u200B
+segment=true
+sentence_end=។៕!?
+[letters]
+ក ឥ ឦ	ខ ឧ ឩ	គ ឪ ឳ	ឃ ឫ	ង ឬ	ច ឭ	ឆ ឮ	ជ ឯ	ឈ ឰ	ញ ឱ ឲ
+ដ ា	ិ ឋ	ី ឌ	ឹ ឍ	ណ ឺ	ត ុ	ថ ូ	ទ ួ	ធ ើ	ន ឿ
+ប ៀ	ផ េ	ព ែ	ភ ៃ	ម ោ	្	យ ៅ	រ ុំ	ល ំ	វ ាំ
+ស ះ	ហ ៈ	ឡ េះ	អ ោះ	់ ៖	៉ ៑	៊ ៌ ៎	័ ៍ ៏	។ ៕	\u200B
+[symbols]
+១	២	៣	៤	៥	៦	៧	៨	៩	០
+ៗ	៛ $	«	»	៙	៚	៘	\u17CE	\u17CF	\u17DD
+!	@	#	$	%	^	&	*	(	)
+- _	= +	/ \\	" `	' ~	: <	; >	? |	[ {	] }
+[hardware]
+1	១
+2	២
+3	៣
+4	៤
+5	៥
+6	៦
+7	៧
+8	៨
+9	៩
+0	០
+-	ឥ
+=	ឲ
+!	!
+@	ៗ
+#	"
+$	៛
+%	%
+^	៍
+&	័
+*	៏
+(	(
+)	)
+_	៌
++	=
+q	ឆ
+w	ឹ
+e	េ
+r	រ
+t	ត
+y	យ
+u	ុ
+i	ិ
+o	ោ
+p	ផ
+[	ៀ
+]	ឪ
+\	ឮ
+Q	ឈ
+W	ឺ
+E	ែ
+R	ឬ
+T	ទ
+Y	ួ
+U	ូ
+I	ី
+O	ៅ
+P	ភ
+{	ឿ
+}	ឧ
+|	ឭ
+a	ា
+s	ស
+d	ដ
+f	ថ
+g	ង
+h	ហ
+j	្
+k	ក
+l	ល
+;	ើ
+'	់
+A	ាំ
+S	ៃ
+D	ឌ
+F	ធ
+G	អ
+H	ះ
+J	ញ
+K	គ
+L	ឡ
+:	ោះ
+"	៉
+z	ឋ
+x	ខ
+c	ច
+v	វ
+b	ប
+n	ន
+m	ម
+,	ុំ
+.	។
+/	៊
+Z	ឍ
+X	ឃ
+C	ជ
+V	េះ
+B	ព
+N	ណ
+M	ំ
+<	ុះ
+>	៕
+?	?

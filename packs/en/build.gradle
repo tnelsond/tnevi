@@ -1,0 +1,32 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Language pack: a data-only APK read by the keyboard (same signing key required).
+android {
+    namespace 'dev.vimkeyboard.pack.en'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'dev.vimkeyboard.pack.en'
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            assets.srcDirs = ['assets']
+            res.srcDirs = ['res']
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+}
