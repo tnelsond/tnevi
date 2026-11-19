@@ -44,17 +44,32 @@ jobs:
             echo "signed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          KS="$RUNNER_TEMP/release.jks"
-          echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
-          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          fail() { echo "::error::$*"; exit 1; }
+          [ -n "$KEYSTORE_PASSWORD" ] || fail "The KEYSTORE_PASSWORD secret is missing or empty."
+          [ -n "$KEY_ALIAS" ] || fail "The KEY_ALIAS secret is missing or empty (it should be: tnevi)."
+          KS="$RUNNER_TEMP/release.keystore"
+          printf '%s' "$KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > "$KS" 2>/dev/null \
+            || fail "KEYSTORE_BASE64 is not valid base64. Paste the whole output of: base64 -w0 tnevi-release.p12"
+          [ -s "$KS" ] || fail "KEYSTORE_BASE64 decoded to an empty file."
+          echo "keystore: $(stat -c%s "$KS") bytes"
+          keytool -list -keystore "$KS" -storepass:env KEYSTORE_PASSWORD >/dev/null 2>&1 \
+            || fail "Could not open the keystore: KEYSTORE_PASSWORD is wrong, or KEYSTORE_BASE64 is not the .p12/.jks file."
+          keytool -list -keystore "$KS" -storepass:env KEYSTORE_PASSWORD -alias "$KEY_ALIAS" >/dev/null 2>&1 \
+            || fail "The keystore has no key with the name in KEY_ALIAS. Keys in it: $(keytool -list -keystore "$KS" -storepass:env KEYSTORE_PASSWORD 2>/dev/null | grep -i PrivateKeyEntry | cut -d, -f1 | tr '\n' ' ')"
+          SDK=${ANDROID_HOME:-$ANDROID_SDK_ROOT}
+          BT=$(ls -d "$SDK"/build-tools/*/ 2>/dev/null | sort -V | tail -1)
+          [ -x "$BT/apksigner" ] || fail "apksigner not found under $SDK/build-tools"
+          echo "build-tools: $BT"
           VERSION=${GITHUB_REF_NAME#v}
           [ "$GITHUB_EVENT_NAME" = release ] || VERSION="$VERSION-$(git rev-parse --short HEAD)"
           mkdir -p dist
           sign() {
-            "$BT/zipalign" -f 4 "$1" "$RUNNER_TEMP/aligned.apk"
+            [ -f "$1" ] || fail "Missing $1. Release outputs: $(ls app/build/outputs/apk/release packs/*/build/outputs/apk/release 2>&1 | tr '\n' ' ')"
+            "$BT/zipalign" -f 4 "$1" "$RUNNER_TEMP/aligned.apk" || fail "zipalign failed on $1"
             "$BT/apksigner" sign --ks "$KS" --ks-pass env:KEYSTORE_PASSWORD --ks-key-alias "$KEY_ALIAS" \
-                --out "$2" "$RUNNER_TEMP/aligned.apk"
-            "$BT/apksigner" verify "$2"
+                --out "$2" "$RUNNER_TEMP/aligned.apk" || fail "apksigner could not sign $1"
+            "$BT/apksigner" verify "$2" || fail "Signature check failed for $2"
+            echo "signed $2"
           }
           sign app/build/outputs/apk/release/app-release-unsigned.apk "dist/tnevi-$VERSION.apk"
           sign packs/en/build/outputs/apk/release/pack-en-release-unsigned.apk "dist/tnevi-pack-en-$VERSION.apk"
