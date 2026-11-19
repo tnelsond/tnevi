@@ -2,9 +2,11 @@ name: Build APK
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
+  # Publishing a release on GitHub (any tag name) builds, signs and attaches the APKs.
+  release:
+    types: [published]
 permissions:
   contents: write
 jobs:
@@ -46,7 +48,7 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           VERSION=${GITHUB_REF_NAME#v}
-          case "$GITHUB_REF" in refs/tags/*) ;; *) VERSION="$VERSION-$(git rev-parse --short HEAD)" ;; esac
+          [ "$GITHUB_EVENT_NAME" = release ] || VERSION="$VERSION-$(git rev-parse --short HEAD)"
           mkdir -p dist
           sign() {
             "$BT/zipalign" -f 4 "$1" "$RUNNER_TEMP/aligned.apk"
@@ -75,13 +77,12 @@ jobs:
           path: dist/*.apk
 
       - name: Refuse to release without the signing key
-        if: startsWith(github.ref, 'refs/tags/v') && steps.sign.outputs.signed != 'true'
+        if: github.event_name == 'release' && steps.sign.outputs.signed != 'true'
         run: |
-          echo "::error::Add KEYSTORE_BASE64, KEYSTORE_PASSWORD and KEY_ALIAS to the repository secrets before tagging a release."
+          echo "::error::Add KEYSTORE_BASE64, KEYSTORE_PASSWORD and KEY_ALIAS to the repository secrets, then publish the release again."
           exit 1
-      - name: Publish release (tags v*)
-        if: startsWith(github.ref, 'refs/tags/v') && steps.sign.outputs.signed == 'true'
+      - name: Attach APKs to the release
+        if: github.event_name == 'release' && steps.sign.outputs.signed == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.apk
-          generate_release_notes: true

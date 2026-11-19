@@ -132,14 +132,14 @@ It is also a Gradle project with modules `:app`, `:pack-en` and `:pack-km`: `./g
 
 ### Releases and signing
 
-Every push builds on GitHub (`.github/workflows/build.yml`). Pushing a tag `v*` publishes a release on the **Releases** page with the keyboard and both packs.
+Every push builds on GitHub (`.github/workflows/build.yml`). Publishing a release on the **Releases** page (any tag name) builds, signs and attaches the keyboard and both packs.
 
 Release APKs are signed with the repository's own key, stored only in its Actions secrets:
 - `KEYSTORE_BASE64`
 - `KEYSTORE_PASSWORD`
 - `KEY_ALIAS`
 
-The same key has to sign every release, so that updates install over each other and the keyboard accepts the packs. A tag pushed without these secrets fails rather than publish APKs that can't be updated.
+The same key has to sign every release, so that updates install over each other and the keyboard accepts the packs. A release published without these secrets gets an error instead of APKs that couldn't be updated later.
 
 To make the key with `openssl` (preinstalled on most Linux/macOS; Termux: `pkg install openssl-tool`):
 ```sh
