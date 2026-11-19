@@ -141,12 +141,16 @@ Release APKs are signed with the repository's own key, stored only in its Action
 
 The same key has to sign every release, so that updates install over each other and the keyboard accepts the packs. A tag pushed without these secrets fails rather than publish APKs that can't be updated.
 
-To make the key:
+To make the key with `openssl` (preinstalled on most Linux/macOS; Termux: `pkg install openssl-tool`):
 ```sh
-keytool -genkeypair -keystore tnevi-release.jks -alias tnevi -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=tnevi"
-base64 -w0 tnevi-release.jks   # paste the output into the KEYSTORE_BASE64 secret
+openssl req -x509 -newkey rsa:4096 -nodes -keyout key.pem -out cert.pem -days 36500 -subj "/CN=tnevi"
+openssl pkcs12 -export -inkey key.pem -in cert.pem -name tnevi -out tnevi-release.p12   # asks for a password
+rm key.pem cert.pem
+base64 -w0 tnevi-release.p12   # paste the output into the KEYSTORE_BASE64 secret
 ```
-Keep a backup of the `.jks` file and its password.
+Set `KEYSTORE_PASSWORD` to the password you chose and `KEY_ALIAS` to `tnevi`.
+(With a JDK, `keytool -genkeypair -keystore tnevi-release.jks -alias tnevi -keyalg RSA -keysize 4096 -validity 36500` does the same.)
+Keep a backup of the `.p12` file and its password: without them no one can sign an update.
 
 Builds without the secret (pull requests, forks) still produce installable debug APKs as workflow artifacts. Those are signed with a throwaway key, so install the keyboard and packs from the same run.
 
