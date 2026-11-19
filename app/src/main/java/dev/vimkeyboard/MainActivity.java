@@ -1,0 +1,171 @@
+package dev.vimkeyboard;
+
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.graphics.Typeface;
+import android.os.Bundle;
+import android.provider.Settings;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.View;
+import android.view.inputmethod.InputMethodInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
+import android.widget.CompoundButton;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.Switch;
+import android.widget.TextView;
+
+/** Setup screen: enable/select the keyboard, settings, a practice field and a cheat sheet. */
+public final class MainActivity extends Activity {
+
+    private TextView status;
+    private float dp;
+
+    private static final String CHEAT =
+            "MODES     i a I A o O  insert   R replace   v V visual\n" +
+            "          tap the mode badge: Insert <-> Normal   (Ctrl-[ / Ctrl-c = Esc)\n" +
+            "MOVE      h j k l  w b e W B E ge  0 ^ $  gg G  { }  %  H M L\n" +
+            "FIND      f F t T ; ,   / ? n N * #   ma `a 'a\n" +
+            "OPERATORS d c y > < gu gU g~   + motion / text object\n" +
+            "OBJECTS   iw aw iW i\" a\" i' i( a( i{ i[ i< ip ap is\n" +
+            "EDIT      x X s S C D Y r J gJ ~ p P  Ctrl-a Ctrl-x\n" +
+            "UNDO      u  Ctrl-r (↷)  .  repeat\n" +
+            "REGISTERS \"a-\"z  \"A append  \"_ black hole  (unnamed = clipboard)\n" +
+            "EX        :s/a/b/g  :%s  :'<,'>s  :g/re/d  :v/re/d  :sort  :12  :d  :y\n" +
+            "          :w = send/submit   :q = hide keyboard   :wq / ZZ = both\n" +
+            "LONG-PRESS 1 ctrl  2 \u2191  3 redo  4 \u2193  9 `  0 \\   . ! ?\n" +
+            "HISTORY   \u2191 in Normal opens : with the last command; \u2191 \u2193 in : and / browse history\n" +
+            "          q-p % ^ ~ | [ ] < > { }   a-l @ # & * - + = ( )   z-m _ $ \" ' : ; /\n" +
+            "LANGUAGE  long-press space: English / \u1781\u17D2\u1798\u17C2\u179A / other keyboards;\n" +
+            "          or slide on space, or Ctrl+Space (hardware)\n" +
+            "          Khmer (NiDA): \u21E7 for second row of letters, long-press for extras\n" +
+            "          command modes always show English keys\n" +
+            "SWIPE     slide across English letters; tap a suggestion to fix the word\n" +
+            "          terminal apps get raw keys (Esc, Ctrl-x, arrows not remapped)";
+
+    @Override protected void onCreate(Bundle b) {
+        super.onCreate(b);
+        dp = getResources().getDisplayMetrics().density;
+        final SharedPreferences prefs = getSharedPreferences(VimKeyboardService.PREFS, MODE_PRIVATE);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        int pad = px(20);
+        col.setPadding(pad, pad, pad, pad);
+        scroll.addView(col);
+
+        TextView title = new TextView(this);
+        title.setText("Vim Keyboard");
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        col.addView(title);
+
+        TextView sub = text("Edit any text field with vi commands. The keyboard starts in Insert mode; tap the mode badge (top left) to switch to Normal mode and back.", 15);
+        col.addView(sub);
+
+        status = text("", 15);
+        status.setPadding(0, px(12), 0, px(4));
+        col.addView(status);
+
+        Button enable = new Button(this);
+        enable.setText("1.  Enable Vim Keyboard");
+        enable.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)); }
+        });
+        col.addView(enable);
+
+        Button pick = new Button(this);
+        pick.setText("2.  Switch to Vim Keyboard");
+        pick.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                if (imm != null) imm.showInputMethodPicker();
+            }
+        });
+        col.addView(pick);
+
+        col.addView(toggle("Start each field in Normal mode", VimKeyboardService.PREF_START_NORMAL, false, prefs));
+        col.addView(toggle("Block cursor in Normal mode (selects the character under the cursor)",
+                VimKeyboardService.PREF_BLOCK_CURSOR, true, prefs));
+
+        col.addView(toggle("Swipe typing (English)", VimKeyboardService.PREF_SWIPE, true, prefs));
+        col.addView(toggle("Next-word suggestions (English)", VimKeyboardService.PREF_PREDICT, true, prefs));
+
+        TextView tryIt = text("Practice here:", 15);
+        tryIt.setPadding(0, px(16), 0, px(4));
+        col.addView(tryIt);
+
+        EditText field = new EditText(this);
+        field.setTypeface(Typeface.MONOSPACE);
+        field.setMinLines(6);
+        field.setGravity(Gravity.TOP | Gravity.START);
+        field.setText("The quick brown fox jumps over the lazy dog.\n\n" +
+                "function greet(name) {\n    return \"Hello, \" + name;\n}\n\n" +
+                "Try: ciw  dd  yyp  di(  ci\"  :%s/fox/cat/g  .  u");
+        col.addView(field);
+
+        TextView cheatTitle = text("Cheat sheet", 17);
+        cheatTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        cheatTitle.setPadding(0, px(16), 0, px(6));
+        col.addView(cheatTitle);
+
+        TextView cheat = text(CHEAT, 11);
+        cheat.setTypeface(Typeface.MONOSPACE);
+        cheat.setHorizontallyScrolling(true);
+        cheat.setTextIsSelectable(true);
+        android.widget.HorizontalScrollView hs = new android.widget.HorizontalScrollView(this);
+        hs.addView(cheat);
+        col.addView(hs);
+
+        setContentView(scroll);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        refreshStatus();
+    }
+
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) refreshStatus();
+    }
+
+    private void refreshStatus() {
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        boolean enabled = false;
+        if (imm != null) for (InputMethodInfo info : imm.getEnabledInputMethodList())
+            if (info.getPackageName().equals(getPackageName())) enabled = true;
+        String current = Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD);
+        boolean selected = current != null && current.startsWith(getPackageName() + "/");
+        status.setText((enabled ? "✓ Enabled" : "✗ Not enabled yet") + "     "
+                + (selected ? "✓ Selected" : "✗ Not selected"));
+    }
+
+    private int px(float v) { return Math.round(v * dp); }
+
+    private TextView text(String s, int sp) {
+        TextView t = new TextView(this);
+        t.setText(s);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        return t;
+    }
+
+    private Switch toggle(String label, final String key, boolean def, final SharedPreferences prefs) {
+        Switch s = new Switch(this);
+        s.setText(label);
+        s.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        s.setPadding(0, px(10), 0, px(10));
+        s.setChecked(prefs.getBoolean(key, def));
+        s.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override public void onCheckedChanged(CompoundButton b, boolean on) { prefs.edit().putBoolean(key, on).apply(); }
+        });
+        return s;
+    }
+}
