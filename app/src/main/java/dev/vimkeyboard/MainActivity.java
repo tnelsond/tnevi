@@ -62,7 +62,7 @@ public final class MainActivity extends Activity {
         scroll.addView(col);
 
         TextView title = new TextView(this);
-        title.setText("Vim Keyboard");
+        title.setText("TneVi");
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         col.addView(title);
@@ -75,14 +75,14 @@ public final class MainActivity extends Activity {
         col.addView(status);
 
         Button enable = new Button(this);
-        enable.setText("1.  Enable Vim Keyboard");
+        enable.setText("1.  Enable TneVi");
         enable.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)); }
         });
         col.addView(enable);
 
         Button pick = new Button(this);
-        pick.setText("2.  Switch to Vim Keyboard");
+        pick.setText("2.  Switch to TneVi");
         pick.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);

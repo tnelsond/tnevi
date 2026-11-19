@@ -1,11 +1,11 @@
-# tnevi — a vi keyboard for Android
+# TneVi — a vi keyboard for Android
 
 An Android keyboard (input method) that lets you edit any text field with vi commands:
 Normal, Insert, Replace, Visual, Visual-line and `:` command-line modes.
 
 ## Install
 
-tnevi is split into small apps so the keyboard itself stays tiny and offline:
+TneVi is split into small apps so the keyboard itself stays tiny and offline:
 
 | APK | What it is | Size |
 |---|---|---|
@@ -14,8 +14,8 @@ tnevi is split into small apps so the keyboard itself stays tiny and offline:
 | `tnevi-pack-km.apk` | Khmer keyboard (Gboard ដើម layout) with swipe + suggestions | 4.6 MB |
 
 1. Install `tnevi.apk`, plus any packs you want. Your browser or file manager needs permission to install unknown apps.
-2. Open **Vim Keyboard** → tap **Enable Vim Keyboard** → turn it on.
-3. Tap **Switch to Vim Keyboard** (or long-press the space bar later to switch keyboards).
+2. Open **TneVi** → tap **Enable TneVi** → turn it on.
+3. Tap **Switch to TneVi** (or long-press the space bar later to switch keyboards).
 
 The setup screen lists which language packs are installed. Packs are picked up automatically the next time a text field opens.
 

@@ -1,4 +1,4 @@
-# tnevi language pack: English. The QWERTY layout is built into the keyboard;
+# TneVi language pack: English. The QWERTY layout is built into the keyboard;
 # this pack adds the swipe vocabulary and n-gram model (lm.bin).
 name=English
 separator= 

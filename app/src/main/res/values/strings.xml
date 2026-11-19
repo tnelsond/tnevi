@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Vim Keyboard</string>
-    <string name="ime_name">Vim Keyboard</string>
+    <string name="app_name">TneVi</string>
+    <string name="ime_name">TneVi</string>
     <string name="subtype_en">English (US)</string>
 </resources>
