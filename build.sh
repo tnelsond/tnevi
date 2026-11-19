@@ -10,7 +10,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION_CODE=12 VERSION_NAME=3.0
+VERSION_CODE=13 VERSION_NAME=3.2
 PACK_VERSION_CODE=1 PACK_VERSION_NAME=1.0
 
 SDK=${ANDROID_HOME:-/usr/lib/android-sdk}

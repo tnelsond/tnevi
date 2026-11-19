@@ -6,7 +6,9 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -44,7 +46,8 @@ public final class VimKeyboardView extends LinearLayout {
     public interface Listener {
         void onKey(String key);
         void onLongPressSpace();
-        void onGesture(float[] xs, float[] ys, int count, float[][] centers, float keyWidth, int caseMode);
+        /** Returns false if no word was typed (the view then types the touched key instead). */
+        boolean onGesture(float[] xs, float[] ys, int count, float[][] centers, float keyWidth, int caseMode);
         void onPickSuggestion(String word);
         void onLanguageChanged(int index);
         /** Mode badge tapped: switch between Insert and Normal (command) mode. */
@@ -83,25 +86,55 @@ public final class VimKeyboardView extends LinearLayout {
         }
     }
 
-    /** Key with a small hint drawn in its top-right corner (like Gboard). */
+    /**
+     * A key. Its touch area is its whole cell (no dead gaps between keys); the visible key is drawn
+     * inset by a small gap. Edge keys can claim extra empty space beside them (like Gboard's A and L),
+     * with the visible key kept at normal size. A hint is drawn in the top-right corner.
+     */
     static final class KeyView extends TextView {
         private final Paint hintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private String hint = "";
+        private final int gapX, gapY;
+        private Drawable keyBackground;
+        /** Fraction of the cell width that is empty touch area to the left/right of the visible key. */
+        float extraLeft, extraRight;
+
         KeyView(Context c, float dp) {
             super(c);
+            gapX = Math.round(2 * dp);
+            gapY = Math.round(3 * dp);
             hintPaint.setColor(0xFFC9CED8);
             hintPaint.setTextSize(13 * dp * c.getResources().getConfiguration().fontScale);
             hintPaint.setTextAlign(Paint.Align.RIGHT);
         }
+
+        void setKeyBackground(Drawable d) { keyBackground = d; applyInsets(getWidth()); }
+
+        int insetLeft() { return gapX + Math.round(getWidth() * extraLeft); }
+        int insetRight() { return gapX + Math.round(getWidth() * extraRight); }
+        int visibleWidth() { return getWidth() - insetLeft() - insetRight(); }
+
+        private void applyInsets(int w) {
+            if (keyBackground == null) return;
+            int l = gapX + Math.round(w * extraLeft), r = gapX + Math.round(w * extraRight);
+            setBackground(new InsetDrawable(keyBackground, l, gapY, r, gapY));
+            setPadding(l - gapX, 0, r - gapX, 0);  // centre the label on the visible key
+        }
+
+        @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
+            super.onSizeChanged(w, h, ow, oh);
+            if (extraLeft > 0 || extraRight > 0) applyInsets(w);
+        }
+
         void setHint(String h) { hint = h == null ? "" : h; invalidate(); }
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             if (hint.isEmpty()) return;
             // Single-line centred TextViews scroll their content; draw relative to the visible area.
-            float pad = getWidth() * 0.09f;
-            float x = getScrollX() + getWidth() - pad;
-            float y = getScrollY() + pad * 0.6f - hintPaint.ascent();
-            float maxW = getWidth() * 0.8f;
+            float pad = visibleWidth() * 0.09f + gapY * 0.3f;
+            float x = getScrollX() + getWidth() - insetRight() - pad + gapX;
+            float y = getScrollY() + gapY + pad * 0.6f - hintPaint.ascent();
+            float maxW = visibleWidth() * 0.8f;
             float tw = hintPaint.measureText(hint);
             if (tw > maxW) {
                 float old = hintPaint.getTextSize();
@@ -147,7 +180,7 @@ public final class VimKeyboardView extends LinearLayout {
         this.dp = ctx.getResources().getDisplayMetrics().density;
         setOrientation(VERTICAL);
         setBackgroundColor(BG);
-        setPadding(px(3), px(2), px(3), px(6));
+        setPadding(0, px(2), 0, px(4));
         setWillNotDraw(false);
         trailPaint.setColor(TRAIL);
         trailPaint.setStyle(Paint.Style.STROKE);
@@ -274,9 +307,14 @@ public final class VimKeyboardView extends LinearLayout {
             for (char c : "qwertyuiop".toCharArray()) r1.addView(letter(c));
             keyRows.addView(r1);
             LinearLayout r2 = row(ROW_H);
-            spacer(r2, 0.5f);
-            for (char c : "asdfghjkl".toCharArray()) r2.addView(letter(c));
-            spacer(r2, 0.5f);
+            for (char c : "asdfghjkl".toCharArray()) {
+                KeyView k = (KeyView) letter(c);
+                if (c == 'a' || c == 'l') {
+                    ((LayoutParams) k.getLayoutParams()).weight = 1.5f;
+                    if (c == 'a') k.extraLeft = 1f / 3; else k.extraRight = 1f / 3;
+                }
+                r2.addView(k);
+            }
             keyRows.addView(r2);
             LinearLayout r3 = row(ROW_H);
             shiftKey = codeKey("⇧", SHIFT, 1.5f, true);
@@ -359,10 +397,8 @@ public final class VimKeyboardView extends LinearLayout {
         bg.addState(new int[]{android.R.attr.state_pressed}, rounded(KEY_PRESSED, px(6)));
         bg.addState(new int[]{android.R.attr.state_selected}, rounded(ACCENT_ON, px(6)));
         bg.addState(new int[]{}, rounded(special ? KEY_SPECIAL : KEY, px(6)));
-        t.setBackground(bg);
-        LayoutParams lp = new LayoutParams(0, LayoutParams.MATCH_PARENT, weight);
-        lp.setMargins(px(2), px(3), px(2), px(3));
-        t.setLayoutParams(lp);
+        t.setKeyBackground(bg);
+        t.setLayoutParams(new LayoutParams(0, LayoutParams.MATCH_PARENT, weight));
         t.setOnTouchListener(touch);
         return t;
     }
@@ -415,13 +451,30 @@ public final class VimKeyboardView extends LinearLayout {
         @Override public boolean onTouch(View v, MotionEvent ev) {
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    // Fast typing: the next finger lands before the previous one lifts.
+                    // Commit the previous key now instead of losing it.
+                    if (downView != null && downView != v) commitPending();
                     v.setPressed(true);
                     v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                     downView = v;
                     onDown(v.getTag(), ev.getRawX(), ev.getRawY());
                     showPreview(v);
                     return true;
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    // A second finger on the same key (e.g. alternating thumbs on a double letter).
+                    if (v == downView) {
+                        commitPending();
+                        int idx = ev.getActionIndex();
+                        float rx = ev.getX(idx) + (ev.getRawX() - ev.getX()), ry = ev.getY(idx) + (ev.getRawY() - ev.getY());
+                        v.setPressed(true);
+                        v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                        downView = v;
+                        onDown(v.getTag(), rx, ry);
+                        showPreview(v);
+                    }
+                    return true;
                 case MotionEvent.ACTION_MOVE:
+                    if (v != downView) return true;   // a finger whose key was already committed
                     for (int h = 0; h < ev.getHistorySize(); h++) onMove(ev.getHistoricalAxisValue(MotionEvent.AXIS_X, h) + (ev.getRawX() - ev.getX()),
                             ev.getHistoricalAxisValue(MotionEvent.AXIS_Y, h) + (ev.getRawY() - ev.getY()));
                     onMove(ev.getRawX(), ev.getRawY());
@@ -429,11 +482,15 @@ public final class VimKeyboardView extends LinearLayout {
                     return true;
                 case MotionEvent.ACTION_UP:
                     v.setPressed(false);
+                    if (v != downView) return true;
                     onUp();
+                    downView = null;
                     handler.postDelayed(hidePreviewLater, 70);
                     return true;
                 case MotionEvent.ACTION_CANCEL:
                     v.setPressed(false);
+                    if (v != downView) return true;
+                    downView = null;
                     hidePreview();
                     dismissOptions();
                     cancelTimers();
@@ -446,6 +503,23 @@ public final class VimKeyboardView extends LinearLayout {
             return true;
         }
     };
+
+    /** Types the key still held by a previous finger (if it is a plain tap) and forgets it. */
+    private void commitPending() {
+        View prev = downView;
+        if (prev != null) prev.setPressed(false);
+        if (popup == null && !longFired && !swiping) {
+            if (downKind == DOWN_CHAR) send(resolve(downSpec), true);
+            else if (downKind == DOWN_SPACE) send(" ", true);
+        }
+        dismissOptions();
+        cancelTimers();
+        downKind = DOWN_NONE;
+        swiping = false;
+        gesture.clear();
+        downView = null;
+        invalidate();
+    }
 
     private void cancelTimers() {
         if (repeater != null) handler.removeCallbacks(repeater);
@@ -562,7 +636,8 @@ public final class VimKeyboardView extends LinearLayout {
         gesture.add(new float[]{x, y});
         if (!swiping) {
             float dx = x - downX, dy = y - downY;
-            if (dx * dx + dy * dy > px(22) * px(22)) {
+            float start = Math.max(px(24), downView != null ? 0.6f * ((KeyView) downView).visibleWidth() : 0);
+            if (dx * dx + dy * dy > start * start) {
                 swiping = true;
                 cancelTimers();
             }
@@ -588,7 +663,9 @@ public final class VimKeyboardView extends LinearLayout {
                 String pick = popupSel >= 0 ? popupOptions[popupSel] : null;
                 dismissOptions();
                 if (pick != null) send(pick, false);
-            } else if (swiping) finishGesture();
+            } else if (swiping) {
+                if (!finishGesture()) send(resolve(downSpec), true);  // no word found: it was a tap
+            }
             else if (!fired) send(resolve(downSpec), true);
         }
         swiping = false;
@@ -637,7 +714,8 @@ public final class VimKeyboardView extends LinearLayout {
             if (label.length() != 1 || ((String) tag).startsWith("<")) { hidePreview(); return; }
         }
         if (key.getWidth() == 0) return;
-        int w = key.getWidth() + px(14), h = key.getHeight() + px(34);
+        KeyView kv = (KeyView) key;
+        int w = kv.visibleWidth() + px(14), h = key.getHeight() + px(34);
         if (preview == null) {
             previewText = new TextView(getContext());
             previewText.setGravity(Gravity.CENTER_HORIZONTAL | Gravity.TOP);
@@ -653,7 +731,7 @@ public final class VimKeyboardView extends LinearLayout {
         previewText.setTextSize(TypedValue.COMPLEX_UNIT_SP, packLayout() != null ? 32 : 30);
         previewText.setPadding(0, px(6), 0, 0);
         key.getLocationInWindow(loc);
-        int x = loc[0] - (w - key.getWidth()) / 2;
+        int x = loc[0] + kv.insetLeft() - (w - kv.visibleWidth()) / 2;
         int y = loc[1] + key.getHeight() - h;   // bubble grows up from the key's bottom edge, covering it like Gboard
         y -= key.getHeight() / 2 + px(4);        // lift so the character is visible above the finger
         try {
@@ -749,7 +827,8 @@ public final class VimKeyboardView extends LinearLayout {
         popupSel = -1;
     }
 
-    private void finishGesture() {
+    /** Decodes the swipe; returns false if it typed nothing (too short, or no matching word). */
+    private boolean finishGesture() {
         int k = 0;
         for (TextView t : charKeys) k = Math.max(k, ((Spec) t.getTag()).swipeIndex + 1);
         float[][] centers = new float[k][];
@@ -757,16 +836,24 @@ public final class VimKeyboardView extends LinearLayout {
         for (TextView t : charKeys) {
             Spec sp = (Spec) t.getTag();
             if (sp.swipeIndex < 0) continue;
+            KeyView kv = (KeyView) t;
             t.getLocationOnScreen(loc);
-            centers[sp.swipeIndex] = new float[]{loc[0] + t.getWidth() / 2f, loc[1] + t.getHeight() / 2f};
-            keyW = Math.max(keyW, t.getWidth() + px(4));
+            centers[sp.swipeIndex] = new float[]{loc[0] + kv.insetLeft() + kv.visibleWidth() / 2f, loc[1] + t.getHeight() / 2f};
+            keyW = Math.max(keyW, kv.visibleWidth() + px(4));  // centre-to-centre spacing of keys
         }
         int n = gesture.size();
         float[] xs = new float[n], ys = new float[n];
-        for (int i = 0; i < n; i++) { xs[i] = gesture.get(i)[0]; ys[i] = gesture.get(i)[1]; }
+        float length = 0;
+        for (int i = 0; i < n; i++) {
+            xs[i] = gesture.get(i)[0];
+            ys[i] = gesture.get(i)[1];
+            if (i > 0) length += (float) Math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1]);
+        }
+        if (length < keyW * 0.9f) return false;  // a sliding tap, not a word
         int caseMode = capsLock ? 2 : shift ? 1 : 0;
-        if (shift && !capsLock) { shift = false; refreshLabels(); }
-        listener.onGesture(xs, ys, n, centers, keyW, caseMode);
+        boolean typed = listener.onGesture(xs, ys, n, centers, keyW, caseMode);
+        if (typed && shift && !capsLock) { shift = false; refreshLabels(); }
+        return typed;
     }
 
     private void toggleLanguage() {

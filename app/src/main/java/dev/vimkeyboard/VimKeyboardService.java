@@ -249,19 +249,19 @@ public final class VimKeyboardService extends InputMethodService
         if (view != null) view.setSuggestions(null);
     }
 
-    @Override public void onGesture(float[] xs, float[] ys, int count, float[][] centers, float keyWidth, int caseMode) {
+    @Override public boolean onGesture(float[] xs, float[] ys, int count, float[][] centers, float keyWidth, int caseMode) {
         final LanguagePacks.Language L = lang();
         SwipeDecoder d = L.decoder;
         final LanguageModel m = L.lm;
-        if (d == null || m == null || !getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_SWIPE, true)) return;
+        if (d == null || m == null || !getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_SWIPE, true)) return false;
         InputConnection ic = getCurrentInputConnection();
-        if (ic == null) return;
+        if (ic == null) return false;
         // Context: the words before the cursor pick between similar swipes ("I'll see you" vs "I'll see toy").
         final int[] ctx = L.context(ic.getTextBeforeCursor(150, 0));
         List<String> results = d.decode(xs, ys, count, centers, keyWidth, 4, new SwipeDecoder.Scorer() {
             @Override public float cost(int index) { return m.cost(ctx[0], ctx[1], index + 1); }
         });
-        if (results.isEmpty()) return;
+        if (results.isEmpty()) return false;
         if (caseMode == 0 && L.layout == null) {
             EditorInfo ei = getCurrentInputEditorInfo();
             if (ei != null && ic.getCursorCapsMode(ei.inputType) != 0) caseMode = 1;
@@ -274,6 +274,7 @@ public final class VimKeyboardService extends InputMethodService
         lastAlternatives = cased;
         suggestKind = SUGGEST_ALTERNATIVES;
         showAlternatives();
+        return true;
     }
 
     /**
