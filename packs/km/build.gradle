@@ -11,8 +11,10 @@ android {
         applicationId 'dev.vimkeyboard.pack.km'
         minSdk 21
         targetSdk 34
-        versionCode 1
-        versionName '1.0'
+        // Releases built on GitHub take their version from the release tag and run number,
+        // so every release installs as an update over the previous one.
+        versionCode System.getenv('GITHUB_RUN_NUMBER') ? 1000 + System.getenv('GITHUB_RUN_NUMBER').toInteger() : 12
+        versionName System.getenv('RELEASE_VERSION') ?: '3.0'
     }
 
     sourceSets {

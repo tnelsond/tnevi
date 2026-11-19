@@ -26,6 +26,8 @@ jobs:
             java -cp /tmp/t SwipeContextTest packs/$L/assets/lm.bin test/lm_heldout_$L.txt packs/$L/assets/layout.txt 0.07
           done
       - name: Build
+        env:
+          RELEASE_VERSION: ${{ github.event_name == 'release' && github.ref_name || '' }}
         run: ./gradlew assembleDebug assembleRelease
 
       # Release APKs are signed with the repository's own key, kept in Actions secrets:
@@ -78,7 +80,7 @@ jobs:
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
       - name: Upload debug APKs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: debug-apks
           path: |
@@ -86,7 +88,7 @@ jobs:
             packs/*/build/outputs/apk/debug/*.apk
       - name: Upload signed APKs
         if: steps.sign.outputs.signed == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: signed-apks
           path: dist/*.apk
