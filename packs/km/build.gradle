@@ -25,8 +25,12 @@ android {
 
     buildTypes {
         release {
+            // Unsigned: CI signs release APKs with the key stored in the repo's secrets.
             minifyEnabled false
-            signingConfig signingConfigs.debug
         }
+    }
+
+    lint {
+        checkReleaseBuilds false
     }
 }

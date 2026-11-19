@@ -1,5 +1,10 @@
 name: Build APK
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
@@ -19,17 +24,64 @@ jobs:
             java -cp /tmp/t SwipeContextTest packs/$L/assets/lm.bin test/lm_heldout_$L.txt packs/$L/assets/layout.txt 0.07
           done
       - name: Build
-        run: ./gradlew assembleDebug
-      - uses: actions/upload-artifact@v4
+        run: ./gradlew assembleDebug assembleRelease
+
+      # Release APKs are signed with the repository's own key, kept in Actions secrets:
+      #   KEYSTORE_BASE64 (base64 of the .jks), KEYSTORE_PASSWORD, KEY_ALIAS.
+      # The same key must sign the keyboard and its packs, and every future release, so that
+      # updates install over each other and the keyboard accepts the packs.
+      - name: Sign release APKs
+        id: sign
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::No signing key in secrets (KEYSTORE_BASE64); only debug APKs were built."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          KS="$RUNNER_TEMP/release.jks"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          VERSION=${GITHUB_REF_NAME#v}
+          case "$GITHUB_REF" in refs/tags/*) ;; *) VERSION="$VERSION-$(git rev-parse --short HEAD)" ;; esac
+          mkdir -p dist
+          sign() {
+            "$BT/zipalign" -f 4 "$1" "$RUNNER_TEMP/aligned.apk"
+            "$BT/apksigner" sign --ks "$KS" --ks-pass env:KEYSTORE_PASSWORD --ks-key-alias "$KEY_ALIAS" \
+                --out "$2" "$RUNNER_TEMP/aligned.apk"
+            "$BT/apksigner" verify "$2"
+          }
+          sign app/build/outputs/apk/release/app-release-unsigned.apk "dist/tnevi-$VERSION.apk"
+          sign packs/en/build/outputs/apk/release/pack-en-release-unsigned.apk "dist/tnevi-pack-en-$VERSION.apk"
+          sign packs/km/build/outputs/apk/release/pack-km-release-unsigned.apk "dist/tnevi-pack-km-$VERSION.apk"
+          rm -f "$KS"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload debug APKs
+        uses: actions/upload-artifact@v4
         with:
-          name: VimKeyboard-debug
+          name: debug-apks
           path: |
             app/build/outputs/apk/debug/*.apk
             packs/*/build/outputs/apk/debug/*.apk
-      - name: Attach APK to release (tags v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Upload signed APKs
+        if: steps.sign.outputs.signed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-apks
+          path: dist/*.apk
+
+      - name: Refuse to release without the signing key
+        if: startsWith(github.ref, 'refs/tags/v') && steps.sign.outputs.signed != 'true'
+        run: |
+          echo "::error::Add KEYSTORE_BASE64, KEYSTORE_PASSWORD and KEY_ALIAS to the repository secrets before tagging a release."
+          exit 1
+      - name: Publish release (tags v*)
+        if: startsWith(github.ref, 'refs/tags/v') && steps.sign.outputs.signed == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            app/build/outputs/apk/debug/*.apk
-            packs/*/build/outputs/apk/debug/*.apk
+          files: dist/*.apk
+          generate_release_notes: true

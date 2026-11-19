@@ -128,10 +128,27 @@ Indent (`>`/`<`) uses 4 spaces.
 It uses the plain SDK command-line tools. On Debian/Ubuntu: `apt install aapt dalvik-exchange zipalign apksigner android-sdk-platform-23`.
 All 3 APKs are signed with `debug.keystore`, which is created on first build and kept out of git.
 
-It is also a Gradle project with modules `:app`, `:pack-en` and `:pack-km`: `./gradlew assembleDebug`.
-Pushing to GitHub builds all three (`.github/workflows/build.yml`). Tagging `v*` attaches them to a release.
-CI builds are signed with GitHub's per-run debug key, so install the keyboard and its packs from the **same** run.
-They won't upgrade an install signed with a different key.
+It is also a Gradle project with modules `:app`, `:pack-en` and `:pack-km`: `./gradlew assembleDebug assembleRelease`.
+
+### Releases and signing
+
+Every push builds on GitHub (`.github/workflows/build.yml`). Pushing a tag `v*` publishes a release on the **Releases** page with the keyboard and both packs.
+
+Release APKs are signed with the repository's own key, stored only in its Actions secrets:
+- `KEYSTORE_BASE64`
+- `KEYSTORE_PASSWORD`
+- `KEY_ALIAS`
+
+The same key has to sign every release, so that updates install over each other and the keyboard accepts the packs. A tag pushed without these secrets fails rather than publish APKs that can't be updated.
+
+To make the key:
+```sh
+keytool -genkeypair -keystore tnevi-release.jks -alias tnevi -keyalg RSA -keysize 4096 -validity 36500 -dname "CN=tnevi"
+base64 -w0 tnevi-release.jks   # paste the output into the KEYSTORE_BASE64 secret
+```
+Keep a backup of the `.jks` file and its password.
+
+Builds without the secret (pull requests, forks) still produce installable debug APKs as workflow artifacts. Those are signed with a throwaway key, so install the keyboard and packs from the same run.
 
 Rebuilding the language data (`packs/*/assets/lm.bin`) is described at the top of `tools/build_lm.py`.
 

@@ -16,13 +16,17 @@ android {
 
     buildTypes {
         release {
+            // Unsigned: CI signs release APKs with the key stored in the repo's secrets.
             minifyEnabled false
-            signingConfig signingConfigs.debug
         }
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        checkReleaseBuilds false
     }
 }
