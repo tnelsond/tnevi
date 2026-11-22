@@ -48,6 +48,10 @@ public final class VimKeyboardService extends InputMethodService
     private int suggestKind = SUGGEST_NONE;
     /** The text inserted by the last gesture (leading space + word), for suggestion replacement. */
     private String lastGestureWord, lastGesturePrefix;
+    /** Separator typed after the last swiped/suggested word (" " or zero-width space), or null once anything else is typed. */
+    private String autoSpace;
+    /** Closing punctuation that takes the place of an automatic space ("word ." -> "word."). */
+    private static final String ATTACHING_PUNCTUATION = ".,!?;:)]}%\u2026\u17D4\u17D5\u17D6";
     private List<String> lastAlternatives;
 
     private VimEngine engine;
@@ -158,6 +162,7 @@ public final class VimKeyboardService extends InputMethodService
         else if (view != null) view.setLanguages(viewLanguages(), langIndex); // settings may have changed
         if (view != null) view.resetLayer();
         clearGesture();
+        autoSpace = null;
         if (!passthrough) {
             SharedPreferences p = getSharedPreferences(PREFS, MODE_PRIVATE);
             engine.setBlockCursor(p.getBoolean(PREF_BLOCK_CURSOR, true));
@@ -200,6 +205,8 @@ public final class VimKeyboardService extends InputMethodService
             if (e[0] == newSelStart && e[1] == newSelEnd) { ours = true; break; }
         }
         if (ours || passthrough) return;
+        autoSpace = null;          // the cursor moved: the automatic space no longer applies
+        lastGestureWord = null;
         InputConnection ic = getCurrentInputConnection();
         if (ic != null) ic.beginBatchEdit();
         try {
@@ -218,6 +225,23 @@ public final class VimKeyboardService extends InputMethodService
     // ------------------------------------------------------------------ keyboard events
 
     @Override public void onKey(String key) {
+        String auto = autoSpace;
+        autoSpace = null;
+        if (auto != null && key.length() == 1 && ATTACHING_PUNCTUATION.indexOf(key.charAt(0)) >= 0
+                && engine.getMode() == VimEngine.Mode.INSERT) {
+            InputConnection ic = getCurrentInputConnection();
+            CharSequence b = ic == null ? null : ic.getTextBeforeCursor(auto.length(), 0);
+            if (b != null && b.toString().equals(auto)) deleteBefore(auto.length());
+        }
+        if (auto != null && key.equals(" ") && engine.getMode() == VimEngine.Mode.INSERT) {
+            // Space right after a swiped word: it already has one (Khmer: make the invisible break a space).
+            InputConnection ic = getCurrentInputConnection();
+            CharSequence b = ic == null ? null : ic.getTextBeforeCursor(auto.length(), 0);
+            if (b != null && b.toString().equals(auto)) {
+                if (auto.equals(" ")) { clearGesture(); showPredictions(); return; }
+                deleteBefore(auto.length());
+            }
+        }
         clearGesture();
         applyKey(key);
         if (key.equals(" ") || key.equals("\u200B")) showPredictions();
@@ -294,8 +318,64 @@ public final class VimKeyboardService extends InputMethodService
                 prefix = sameScript ? lang().separator : " ";
             }
         }
-        applyKey(prefix + word);
+        // Like Gboard: a space follows the word, so the next swipe or tap starts a new word.
+        // Typing closing punctuation next removes it again (see onKey).
+        String suffix = inField ? (lang().layout != null ? lang().separator : " ") : "";
+        applyKey(prefix + word + suffix);
+        autoSpace = suffix.isEmpty() ? null : suffix;
         return prefix;
+    }
+
+    private void deleteBefore(int chars) {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null) return;
+        ic.beginBatchEdit();
+        try { engine.deleteBeforeCursor(chars); } finally { ic.endBatchEdit(); }
+        updateUi();
+    }
+
+    /**
+     * The "delete word" button: removes the last swiped word (with the spaces the swipe added)
+     * if the cursor is still right after it; otherwise the word before the cursor.
+     */
+    @Override public void onDeleteWord() {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic == null || passthrough) return;
+        if (engine.getMode() != VimEngine.Mode.INSERT && engine.getMode() != VimEngine.Mode.REPLACE) return;
+        CharSequence before = ic.getTextBeforeCursor(200, 0);
+        String b = before == null ? "" : before.toString();
+        if (lastGestureWord != null) {
+            String swiped = lastGesturePrefix + lastGestureWord + (autoSpace != null ? autoSpace : "");
+            if (b.endsWith(swiped)) {
+                deleteBefore(swiped.length());
+                clearGesture();
+                autoSpace = null;
+                return;
+            }
+        }
+        clearGesture();
+        autoSpace = null;
+        // Otherwise: trailing spaces, then one word.
+        int end = b.length(), p = end;
+        while (p > 0 && (Character.isWhitespace(b.charAt(p - 1)) && b.charAt(p - 1) != '\n' || b.charAt(p - 1) == '\u200B')) p--;
+        if (p == 0 || b.charAt(p - 1) == '\n') { deleteBefore(Math.max(1, end - p)); return; }
+        LanguagePacks.Language L = lang();
+        int word = 0;
+        if (L.lm != null && L.layout != null && L.layout.segment) word = L.lm.lastWordLength(b.substring(0, p));
+        if (word == 0) {
+            int q = p;
+            boolean letters = Character.isLetterOrDigit(b.charAt(q - 1)) || Character.getType(b.charAt(q - 1)) == Character.NON_SPACING_MARK
+                    || Character.getType(b.charAt(q - 1)) == Character.COMBINING_SPACING_MARK || b.charAt(q - 1) == '\'';
+            while (q > 0) {
+                char c = b.charAt(q - 1);
+                boolean isLetter = Character.isLetterOrDigit(c) || c == '\'' || Character.getType(c) == Character.NON_SPACING_MARK
+                        || Character.getType(c) == Character.COMBINING_SPACING_MARK;
+                if (Character.isWhitespace(c) || c == '\u200B' || isLetter != letters) break;
+                q--;
+            }
+            word = p - q;
+        }
+        deleteBefore(end - p + word);
     }
 
     /** Next-word predictions from the n-gram model, shown after a space (English, Insert mode). */
@@ -351,10 +431,13 @@ public final class VimKeyboardService extends InputMethodService
             return;
         }
         if (lastGestureWord == null) return;
-        CharSequence before = ic.getTextBeforeCursor(lastGestureWord.length(), 0);
-        if (before == null || !before.toString().equals(lastGestureWord)) { clearGesture(); return; }
-        for (int i = 0; i < lastGestureWord.length(); i++) applyKey("<BS>");
-        applyKey(word);
+        String suffix = autoSpace != null ? autoSpace : "";
+        String typed = lastGestureWord + suffix;
+        CharSequence before = ic.getTextBeforeCursor(typed.length(), 0);
+        if (before == null || !before.toString().equals(typed)) { clearGesture(); return; }
+        deleteBefore(typed.length());
+        applyKey(word + suffix);
+        autoSpace = suffix.isEmpty() ? null : suffix;
         lastGestureWord = word;
         showAlternatives();
     }

@@ -52,6 +52,8 @@ public final class VimKeyboardView extends LinearLayout {
         void onLanguageChanged(int index);
         /** Mode badge tapped: switch between Insert and Normal (command) mode. */
         void onModeToggle();
+        /** "Delete word" button on the top bar. */
+        void onDeleteWord();
     }
 
     private static final int BG = 0xFF15171C, KEY = 0xFF2B2F38, KEY_PRESSED = 0xFF4A505E,
@@ -149,7 +151,7 @@ public final class VimKeyboardView extends LinearLayout {
     private final float dp;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
-    private TextView modeBadge, statusText;
+    private TextView modeBadge, statusText, deleteWord;
     private String modeLabel;
     private LinearLayout suggestionBar, keyRows;
     private final List<TextView> charKeys = new ArrayList<>();
@@ -230,6 +232,38 @@ public final class VimKeyboardView extends LinearLayout {
         suggestionBar.setOrientation(HORIZONTAL);
         suggestionBar.setVisibility(GONE);
         bar.addView(suggestionBar, new LayoutParams(0, LayoutParams.MATCH_PARENT, 1f));
+        // Delete the last swiped word (or the word before the cursor); hold to keep deleting.
+        deleteWord = new TextView(getContext());
+        deleteWord.setText("\u232B word");
+        deleteWord.setTextColor(TEXT);
+        deleteWord.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        deleteWord.setGravity(Gravity.CENTER);
+        deleteWord.setPadding(px(10), 0, px(10), 0);
+        deleteWord.setBackground(rounded(KEY_SPECIAL, px(12)));
+        deleteWord.setOnTouchListener(new OnTouchListener() {
+            private final Runnable again = new Runnable() {
+                @Override public void run() { listener.onDeleteWord(); handler.postDelayed(this, 250); }
+            };
+            @SuppressLint("ClickableViewAccessibility")
+            @Override public boolean onTouch(View v, MotionEvent ev) {
+                switch (ev.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        v.setPressed(true);
+                        v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                        listener.onDeleteWord();
+                        handler.postDelayed(again, 500);
+                        return true;
+                    case MotionEvent.ACTION_UP: case MotionEvent.ACTION_CANCEL:
+                        v.setPressed(false);
+                        handler.removeCallbacks(again);
+                        return true;
+                }
+                return true;
+            }
+        });
+        LayoutParams dlp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
+        dlp.setMargins(px(4), px(1), px(2), px(1));
+        bar.addView(deleteWord, dlp);
         addView(bar, new LayoutParams(LayoutParams.MATCH_PARENT, px(32)));
     }
 
@@ -922,6 +956,7 @@ public final class VimKeyboardView extends LinearLayout {
             if (cur().layout != null) buildKeys(); else refreshLabels();
         }
         if (!insertLike) setSuggestions(null);
+        deleteWord.setVisibility(insertLike ? VISIBLE : GONE);
     }
 
     /** Shows tappable alternatives for the last swiped word (null/empty hides them). */

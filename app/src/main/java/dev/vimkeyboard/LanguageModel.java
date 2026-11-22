@@ -207,6 +207,15 @@ public final class LanguageModel {
         return ctx;
     }
 
+    /** Length of the longest dictionary word that ends exactly at the end of {@code before}, or 0. */
+    public int lastWordLength(CharSequence before) {
+        if (maxWordLength < 0) contextOfUnspaced("", "");
+        String s = before == null ? "" : before.toString();
+        for (int len = Math.min(maxWordLength, s.length()); len > 0; len--)
+            if (ids.containsKey(s.substring(s.length() - len))) return len;
+        return 0;
+    }
+
     /** Context for the given layout (segmenting scripts without spaces). */
     public int[] contextOf(CharSequence before, Layout layout) {
         if (layout != null && layout.segment) return contextOfUnspaced(before, layout.sentenceEnds);

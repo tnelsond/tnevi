@@ -79,7 +79,11 @@ In Normal mode, `x`, `h` and `l` still treat a whole cluster as one character.
 ## Swipe typing and next-word suggestions (English and Khmer packs)
 
 - Slide your finger across the letters without lifting. A green trail follows your finger.
-- **Word breaks:** English words get a space before them when needed. Khmer words get a zero-width space instead, the standard invisible break that Khmer uses in place of visible spaces.
+- **Spaces:** like Gboard, a swiped word (or a tapped suggestion) is followed by a space, so you can swipe the next word straight away.
+  - Typing closing punctuation (`. , ! ? ; : ) ] }` …) right after it removes that space: "hello ." becomes "hello.".
+  - Tapping space right after it doesn't add a second one.
+  - In Khmer the break is a zero-width space, the invisible break Khmer uses instead of visible spaces, and ។ ៕ ៖ attach the same way. Tapping space turns it into a real space.
+- **⌫ word** (top bar, Insert mode): deletes the word you just swiped, together with its space. Otherwise it deletes the word before the cursor; in Khmer it finds the last dictionary word, since there are no spaces. Hold it to keep deleting.
 - **Khmer swipes** follow typing order through the ដើម keys, including ◌្ for subscripts. For example, ខ្មែរ is ខ → ◌្ → ម → ◌ែ (on ព) → រ. Shifted characters belong to their key, so ែ is swiped through the ព key.
 - **Context:** the decoder looks at the 1–2 words before the cursor (an n-gram language model). So "I'll see you" beats "I'll see toy", and "the United" suggests "States". Khmer text has no spaces, so the words before the cursor are found by splitting the text with the pack's dictionary.
 - Up to 3 alternatives appear in the status bar; tap one to replace the word.

@@ -186,6 +186,17 @@ public final class VimEngine {
         return message;
     }
 
+    /** Insert mode: deletes {@code chars} UTF-16 units before the cursor (used by "delete word"). */
+    public void deleteBeforeCursor(int chars) {
+        if (mode != Mode.INSERT && mode != Mode.REPLACE) return;
+        refresh();
+        int n = Math.max(0, Math.min(chars, cursor));
+        if (n == 0) return;
+        replace(cursor - n, cursor, "");
+        cursor -= n;
+        render();
+    }
+
     /** The field's selection changed for a reason other than this engine (tap, drag, app). */
     public void onExternalSelection(int s, int e) {
         refresh();
