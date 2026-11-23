@@ -27,15 +27,15 @@ The setup screen has a toggle to start every field in Normal mode.
 ## The keyboard
 
 - **Top bar:**
-  - **Mode badge:** green INSERT, blue NORMAL, amber VISUAL, purple COMMAND, red REPLACE. Tap it to switch between Insert and Normal mode.
+  - **Mode badge:** green INS, blue NOR, amber VIS / V-L, purple CMD, red REP. Tap it to switch between Insert and Normal mode.
   - **Middle:** pending keys, the command line, messages, or swipe and next-word suggestions.
-  - **ctrl:** one-shot. Tap ctrl, then `r` sends `<C-r>` and `[` sends Esc.
+  - **ctrl** (command modes): one-shot. Tap ctrl, then `r` sends `<C-r>` and `a` sends `<C-a>`.
   - **↑ ↓** (command modes): cursor movement and `:` / `/` history. Hold them to repeat.
   - **↶ undo:** in Insert mode it deletes the word you just swiped, with its space. Otherwise it deletes the word before the cursor; in Khmer it finds the last dictionary word. Hold it to keep deleting. In Normal and Visual mode it runs vim's `u`, and holding it runs redo (`Ctrl-r`).
 - **Letter layouts** (setup screen → *English letter layout*): QWERTY, Colemak, Colemak-DH, Dvorak, Workman, QWERTZ (German) and AZERTY (French). Swipe typing works on all of them.
-- **Number row only in command modes** (Normal, Visual), for counts like `3dw`. The keyboard keeps the same height. While typing, long-press the top row for digits, as on Gboard: a popup opens with the digit under your finger; let go to type it, or slide right for the symbol beside it.
+- **Number row** above the letters in every mode (Khmer uses its own 4-row layout; its digits are on ?123).
 - **Long-press characters** (shown in each key's corner; positions follow Gboard; they work in every mode):
-  - top row → `1–0`, then `% ^ ~ | [ ] < > { }`
+  - top row → `% ^ ~ | [ ] < > { }`
   - middle row → `@ # & * - + = ( )`
   - bottom row → `_ $ " ' : ; /`
   - `.` → `!` `?`

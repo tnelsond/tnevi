@@ -67,8 +67,8 @@ public final class VimKeyboardView extends LinearLayout {
     private static final int BAR_H = 44, ROW_H = 54, PACK_ROW_H = 48;
     /** The ?123 page has four rows in the height of three letter rows. */
     private static final int SYM_ROW_H = 3 * ROW_H / 4;
-    /** Number row shown in command modes. */
-    private static final int NUM_ROW_H = 39;
+    /** Number row above the Latin letters. */
+    private static final int NUM_ROW_H = 44;
 
     private static final String SHIFT = "SHIFT", SYM = "SYM", CTRL = "CTRL", LANG = "LANG";
     private static final Set<String> NORMAL_REPEAT = new HashSet<>(Arrays.asList(
@@ -216,9 +216,10 @@ public final class VimKeyboardView extends LinearLayout {
         modeBadge = new TextView(getContext());
         modeBadge.setTextColor(0xFF0B0C0F);
         modeBadge.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        modeBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        modeBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         modeBadge.setGravity(Gravity.CENTER);
-        modeBadge.setPadding(px(12), 0, px(12), 0);
+        modeBadge.setPadding(px(7), 0, px(7), 0);
+        modeBadge.setMinWidth(px(40));
         modeBadge.setOnClickListener(new OnClickListener() {
             @Override public void onClick(View v) {
                 v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
@@ -374,18 +375,13 @@ public final class VimKeyboardView extends LinearLayout {
                 keyRows.addView(row);
             }
         } else {
-            // Latin letters (QWERTY, Colemak, Dvorak, ...): no number row; digits are on
-            // long-press of the top row, as on Gboard with its number row off.
+            // Latin letters (QWERTY, Colemak, Dvorak, ...) under a number row.
             String[] rows = LatinLayouts.rows(latinLayout);
-            // Command modes get a number row for counts (3dw, 10j); the letter rows shrink so the
-            // keyboard keeps the same height and the app doesn't jump when the mode changes.
+            // Number row in every mode (digits for typing and for counts like 3dw).
             int letterH = ROW_H;
-            if (!textEntry) {
-                letterH = (3 * ROW_H - NUM_ROW_H) / 3;
-                LinearLayout nums = row(NUM_ROW_H);
-                for (char c : "1234567890".toCharArray()) nums.addView(charKey(new Spec(s(c), null, (String) null, false), 1f));
-                keyRows.addView(nums);
-            }
+            LinearLayout nums = row(NUM_ROW_H);
+            for (char c : "1234567890".toCharArray()) nums.addView(charKey(new Spec(s(c), null, (String) null, false), 1f));
+            keyRows.addView(nums);
             for (int r = 0; r < 3; r++) {
                 LinearLayout row = row(letterH);
                 String keys = rows[r];
@@ -995,7 +991,8 @@ public final class VimKeyboardView extends LinearLayout {
      */
     public void setState(String modeLabel, int modeColor, boolean insertLike, boolean textEntry, String status) {
         this.insertLike = insertLike;
-        this.modeLabel = modeLabel;
+        this.modeLabel = shortMode(modeLabel);
+        modeLabel = this.modeLabel;
         modeBadge.setText(ctrl ? modeLabel + " \u2303" : modeLabel);
         modeBadge.setBackground(rounded(modeColor, px(4)));
         statusText.setText(status == null ? "" : status);
@@ -1005,7 +1002,22 @@ public final class VimKeyboardView extends LinearLayout {
         }
         if (!insertLike) setSuggestions(null);
         upButton.setVisibility(insertLike ? GONE : VISIBLE);
+        ctrlKey.setVisibility(insertLike ? GONE : VISIBLE);   // ctrl is for command modes
+        if (insertLike && ctrl) { ctrl = false; refreshLabels(); }
         downButton.setVisibility(insertLike ? GONE : VISIBLE);
+    }
+
+    private static String shortMode(String m) {
+        switch (m) {
+            case "INSERT": return "INS";
+            case "NORMAL": return "NOR";
+            case "VISUAL": return "VIS";
+            case "V-LINE": return "V-L";
+            case "COMMAND": return "CMD";
+            case "REPLACE": return "REP";
+            case "TERMINAL": return "TERM";
+        }
+        return m;
     }
 
     /** Shows tappable alternatives for the last swiped word (null/empty hides them). */

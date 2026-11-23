@@ -38,8 +38,8 @@ public final class MainActivity extends Activity {
             "REGISTERS \"a-\"z  \"A append  \"_ black hole  (unnamed = clipboard)\n" +
             "EX        :s/a/b/g  :%s  :'<,'>s  :g/re/d  :v/re/d  :sort  :12  :d  :y\n" +
             "          :w = send/submit   :q = hide keyboard   :wq / ZZ = both\n" +
-            "LONG-PRESS top row: digits 1-0 (and % ^ ~ | [ ] < > { })   . for ! ?\n" +
-            "TOP BAR   mode badge = Insert/Normal   ctrl   \u2191 \u2193 (Normal: history, cursor)   \u21B6 undo (hold: redo)\n" +
+            "LONG-PRESS top row % ^ ~ | [ ] < > { }   middle @ # & * - + = ( )   bottom _ $ \" ' : ; /   . ! ?\n" +
+            "TOP BAR   mode badge = Insert/Normal   Normal: ctrl \u2191 \u2193 (history, cursor)   \u21B6 undo (hold: redo)\n" +
             "HISTORY   \u2191 in Normal opens : with the last command; \u2191 \u2193 in : and / browse history\n" +
             "          q-p % ^ ~ | [ ] < > { }   a-l @ # & * - + = ( )   z-m _ $ \" ' : ; /\n" +
             "LANGUAGE  tap space twice, slide on space, or long-press space for the list;\n" +

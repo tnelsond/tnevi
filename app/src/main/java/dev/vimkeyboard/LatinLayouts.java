@@ -2,7 +2,7 @@ package dev.vimkeyboard;
 
 /**
  * Built-in Latin letter layouts (phone versions: three rows of letters).
- * Long-press characters follow Gboard's positions: top row = digits then symbols,
+ * Long-press characters follow Gboard's positions: top row = % ^ ~ | [ ] < > { },
  * middle row = @ # & * - + = ( ), bottom row = _ $ " ' : ; /. QWERTZ and AZERTY add their accents.
  */
 final class LatinLayouts {
@@ -21,7 +21,7 @@ final class LatinLayouts {
             {"azertyuiop", "qsdfghjklm", "wxcvbn"},
     };
 
-    static final String TOP_DIGITS = "1234567890", TOP_SYMBOLS = "%^~|[]<>{}";
+    static final String TOP_SYMBOLS = "%^~|[]<>{}";
     static final String MID_SYMBOLS = "@#&*-+=()", BOTTOM_SYMBOLS = "_$\"':;/";
 
     static int index(String id) {
@@ -44,7 +44,7 @@ final class LatinLayouts {
         String acc = accents(id, c);
         for (int i = 0; i < acc.length(); i++) out.add(String.valueOf(acc.charAt(i)));
         if (row == 0) {
-            if (pos < TOP_DIGITS.length()) out.add(String.valueOf(TOP_DIGITS.charAt(pos)));
+            // digits are on the number row, so the top row only has symbols
             if (pos < TOP_SYMBOLS.length()) out.add(String.valueOf(TOP_SYMBOLS.charAt(pos)));
         } else if (row == 1) {
             if (pos < MID_SYMBOLS.length()) out.add(String.valueOf(MID_SYMBOLS.charAt(pos)));
