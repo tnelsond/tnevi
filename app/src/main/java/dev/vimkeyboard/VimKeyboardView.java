@@ -67,6 +67,8 @@ public final class VimKeyboardView extends LinearLayout {
     private static final int BAR_H = 44, ROW_H = 54, PACK_ROW_H = 48;
     /** The ?123 page has four rows in the height of three letter rows. */
     private static final int SYM_ROW_H = 3 * ROW_H / 4;
+    /** Number row shown in command modes. */
+    private static final int NUM_ROW_H = 39;
 
     private static final String SHIFT = "SHIFT", SYM = "SYM", CTRL = "CTRL", LANG = "LANG";
     private static final Set<String> NORMAL_REPEAT = new HashSet<>(Arrays.asList(
@@ -375,8 +377,17 @@ public final class VimKeyboardView extends LinearLayout {
             // Latin letters (QWERTY, Colemak, Dvorak, ...): no number row; digits are on
             // long-press of the top row, as on Gboard with its number row off.
             String[] rows = LatinLayouts.rows(latinLayout);
+            // Command modes get a number row for counts (3dw, 10j); the letter rows shrink so the
+            // keyboard keeps the same height and the app doesn't jump when the mode changes.
+            int letterH = ROW_H;
+            if (!textEntry) {
+                letterH = (3 * ROW_H - NUM_ROW_H) / 3;
+                LinearLayout nums = row(NUM_ROW_H);
+                for (char c : "1234567890".toCharArray()) nums.addView(charKey(new Spec(s(c), null, (String) null, false), 1f));
+                keyRows.addView(nums);
+            }
             for (int r = 0; r < 3; r++) {
-                LinearLayout row = row(ROW_H);
+                LinearLayout row = row(letterH);
                 String keys = rows[r];
                 float side = keys.length() <= 7 ? 1.5f : keys.length() <= 8 ? 1.25f : 1f;
                 if (r == 2) { shiftKey = codeKey("\u21E7", SHIFT, side, true); row.addView(shiftKey); }
@@ -990,7 +1001,7 @@ public final class VimKeyboardView extends LinearLayout {
         statusText.setText(status == null ? "" : status);
         if (textEntry != this.textEntry) {
             this.textEntry = textEntry;
-            if (cur().layout != null) buildKeys(); else refreshLabels();
+            buildKeys();   // command modes add the number row (and use English keys)
         }
         if (!insertLike) setSuggestions(null);
         upButton.setVisibility(insertLike ? GONE : VISIBLE);

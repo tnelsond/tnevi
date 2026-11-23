@@ -33,7 +33,7 @@ The setup screen has a toggle to start every field in Normal mode.
   - **↑ ↓** (command modes): cursor movement and `:` / `/` history. Hold them to repeat.
   - **↶ undo:** in Insert mode it deletes the word you just swiped, with its space. Otherwise it deletes the word before the cursor; in Khmer it finds the last dictionary word. Hold it to keep deleting. In Normal and Visual mode it runs vim's `u`, and holding it runs redo (`Ctrl-r`).
 - **Letter layouts** (setup screen → *English letter layout*): QWERTY, Colemak, Colemak-DH, Dvorak, Workman, QWERTZ (German) and AZERTY (French). Swipe typing works on all of them.
-- **No number row.** Long-press the top row for digits, as on Gboard. A popup opens with the digit under your finger; let go to type it, or slide right for the symbol beside it.
+- **Number row only in command modes** (Normal, Visual), for counts like `3dw`. The keyboard keeps the same height. While typing, long-press the top row for digits, as on Gboard: a popup opens with the digit under your finger; let go to type it, or slide right for the symbol beside it.
 - **Long-press characters** (shown in each key's corner; positions follow Gboard; they work in every mode):
   - top row → `1–0`, then `% ^ ~ | [ ] < > { }`
   - middle row → `@ # & * - + = ( )`
