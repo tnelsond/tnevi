@@ -26,16 +26,21 @@ The setup screen has a toggle to start every field in Normal mode.
 
 ## The keyboard
 
-- Status bar: mode badge (green INSERT, blue NORMAL, amber VISUAL, purple COMMAND, red REPLACE)
-  plus pending keys / the command line / messages.
-- **Long-press characters** (shown in each key's corner, no duplicates, Gboard's standard spots):
-  - `q–p` → `% ^ ~ | [ ] < > { }`
-  - `a–l` → `@ # & * - + = ( )`
-  - `z–m` → `_ $ " ' : ; /`
-  - `.` → `!` `?` (slide to pick)
-  - `1` ctrl · `2` ↑ · `3` ↷ redo · `4` ↓ · `9` `` ` `` · `0` `\` (↑ ↓ repeat when held)
-  - These work in every mode, including Normal (e.g. long-press `x` for `$`, `b` for `:`, `m` for `/`).
-- ctrl is one-shot: long-press `1`, then `r` sends `<C-r>`, `[` sends Esc. While it's on, the 1 key is highlighted and the mode badge shows ⌃.
+- **Top bar:**
+  - **Mode badge:** green INSERT, blue NORMAL, amber VISUAL, purple COMMAND, red REPLACE. Tap it to switch between Insert and Normal mode.
+  - **Middle:** pending keys, the command line, messages, or swipe and next-word suggestions.
+  - **ctrl:** one-shot. Tap ctrl, then `r` sends `<C-r>` and `[` sends Esc.
+  - **↑ ↓** (command modes): cursor movement and `:` / `/` history. Hold them to repeat.
+  - **↶ undo:** in Insert mode it deletes the word you just swiped, with its space. Otherwise it deletes the word before the cursor; in Khmer it finds the last dictionary word. Hold it to keep deleting. In Normal and Visual mode it runs vim's `u`, and holding it runs redo (`Ctrl-r`).
+- **Letter layouts** (setup screen → *English letter layout*): QWERTY, Colemak, Colemak-DH, Dvorak, Workman, QWERTZ (German) and AZERTY (French). Swipe typing works on all of them.
+- **No number row.** Long-press the top row for digits, as on Gboard. A popup opens with the digit under your finger; let go to type it, or slide right for the symbol beside it.
+- **Long-press characters** (shown in each key's corner; positions follow Gboard; they work in every mode):
+  - top row → `1–0`, then `% ^ ~ | [ ] < > { }`
+  - middle row → `@ # & * - + = ( )`
+  - bottom row → `_ $ " ' : ; /`
+  - `.` → `!` `?`
+  - QWERTZ adds ä ö ü ß. AZERTY adds é è ê ë à â ç ù û î ï ô œ.
+  - The ?123 page has digits and every other symbol, including `` ` `` and `\`.
 - The bottom row has `?123 , space . ⏎`.
 - Hold ⌫ to repeat. Letters don't repeat when held, because long-press types the corner character; use counts like `5j` instead.
 - In Normal mode the character under the cursor is selected to imitate a block cursor (can be turned off).
@@ -65,6 +70,7 @@ The setup screen has a toggle to start every field in Normal mode.
 
 ### Switching language
 
+- **Tap space twice** quickly to switch to the next language. The first space is taken back.
 - **Long-press space** to open a menu of the installed languages plus **⌨ more** (the system keyboard picker). Slide to one and let go.
 - Or slide left/right on the space bar to go to the next language.
 - On a hardware keyboard, **Ctrl+Space** cycles languages.
@@ -83,7 +89,7 @@ In Normal mode, `x`, `h` and `l` still treat a whole cluster as one character.
   - Typing closing punctuation (`. , ! ? ; : ) ] }` …) right after it removes that space: "hello ." becomes "hello.".
   - Tapping space right after it doesn't add a second one.
   - In Khmer the break is a zero-width space, the invisible break Khmer uses instead of visible spaces, and ។ ៕ ៖ attach the same way. Tapping space turns it into a real space.
-- **⌫ word** (top bar, Insert mode): deletes the word you just swiped, together with its space. Otherwise it deletes the word before the cursor; in Khmer it finds the last dictionary word, since there are no spaces. Hold it to keep deleting.
+- **↶ undo** (top bar) takes back the word you just swiped, as described above.
 - **Khmer swipes** follow typing order through the ដើម keys, including ◌្ for subscripts. For example, ខ្មែរ is ខ → ◌្ → ម → ◌ែ (on ព) → រ. Shifted characters belong to their key, so ែ is swiped through the ព key.
 - **Context:** the decoder looks at the 1–2 words before the cursor (an n-gram language model). So "I'll see you" beats "I'll see toy", and "the United" suggests "States". Khmer text has no spaces, so the words before the cursor are found by splitting the text with the pack's dictionary.
 - Up to 3 alternatives appear in the status bar; tap one to replace the word.
@@ -168,6 +174,7 @@ Rebuilding the language data (`packs/*/assets/lm.bin`) is described at the top o
   - Syncs the cursor when you tap the field.
   - Handles hardware keys, terminal pass-through, swipe and suggestions.
 - `VimKeyboardView.java`: the soft keyboard: QWERTY, pack layouts, long-press, previews, swipe trail, suggestions.
+- `LatinLayouts.java`: QWERTY, Colemak, Dvorak and the other built-in letter layouts, with their long-press characters.
 - `LanguagePacks.java`: finds installed packs, checks their signature and loads them.
 - `Layout.java`: parses a pack's `layout.txt` (rows, long-press options, hardware map) and maps words to swipe key paths.
 - `SwipeDecoder.java`: the gesture decoder, for any key layout (pure Java).

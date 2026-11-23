@@ -32,6 +32,7 @@ public final class VimKeyboardService extends InputMethodService
     public static final String PREF_START_NORMAL = "start_normal";
     public static final String PREF_BLOCK_CURSOR = "block_cursor";
     public static final String PREF_LANGUAGE = "language";
+    public static final String PREF_LATIN_LAYOUT = "latin_layout";
     public static final String PREF_SWIPE = "swipe";
 
     public static final String PREF_PREDICT = "predict";
@@ -141,6 +142,7 @@ public final class VimKeyboardService extends InputMethodService
 
     @Override public View onCreateInputView() {
         view = new VimKeyboardView(this, this, viewLanguages(), langIndex);
+        view.setLatinLayout(getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_LATIN_LAYOUT, "qwerty"));
         updateUi();
         return view;
     }
@@ -160,7 +162,10 @@ public final class VimKeyboardService extends InputMethodService
         super.onStartInputView(ei, restarting);
         if (LanguagePacks.fingerprint(this) != packFingerprint) reloadPacks();
         else if (view != null) view.setLanguages(viewLanguages(), langIndex); // settings may have changed
-        if (view != null) view.resetLayer();
+        if (view != null) {
+            view.setLatinLayout(getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_LATIN_LAYOUT, "qwerty"));
+            view.resetLayer();
+        }
         clearGesture();
         autoSpace = null;
         if (!passthrough) {
@@ -227,6 +232,8 @@ public final class VimKeyboardService extends InputMethodService
     @Override public void onKey(String key) {
         String auto = autoSpace;
         autoSpace = null;
+        spaceInserted = key.equals(" ");
+        spaceReplaced = "";
         if (auto != null && key.length() == 1 && ATTACHING_PUNCTUATION.indexOf(key.charAt(0)) >= 0
                 && engine.getMode() == VimEngine.Mode.INSERT) {
             InputConnection ic = getCurrentInputConnection();
@@ -238,8 +245,9 @@ public final class VimKeyboardService extends InputMethodService
             InputConnection ic = getCurrentInputConnection();
             CharSequence b = ic == null ? null : ic.getTextBeforeCursor(auto.length(), 0);
             if (b != null && b.toString().equals(auto)) {
-                if (auto.equals(" ")) { clearGesture(); showPredictions(); return; }
+                if (auto.equals(" ")) { spaceInserted = false; clearGesture(); showPredictions(); return; }
                 deleteBefore(auto.length());
+                spaceReplaced = auto;
             }
         }
         clearGesture();
@@ -338,7 +346,36 @@ public final class VimKeyboardService extends InputMethodService
      * The "delete word" button: removes the last swiped word (with the spaces the swipe added)
      * if the cursor is still right after it; otherwise the word before the cursor.
      */
-    @Override public void onDeleteWord() {
+    /** Top-bar undo: Insert mode removes the last swiped word (or word); command modes run vim's u. */
+    @Override public void onUndo() {
+        if (passthrough) return;
+        switch (engine.getMode()) {
+            case INSERT: case REPLACE: onDeleteWord(); return;
+            case CMDLINE: return;
+            case VISUAL: case VISUAL_LINE: applyKey("<Esc>"); applyKey("u"); return;
+            default: applyKey("<Esc>"); applyKey("u");   // Esc first drops any half-typed command
+        }
+    }
+
+    /** What the last tap on space did, so a double tap can take it back. */
+    private boolean spaceInserted;
+    private String spaceReplaced = "";
+
+    /** Space tapped twice: the view switches language; remove the space the first tap typed. */
+    @Override public void onDoubleSpace() {
+        if (spaceInserted && engine.getMode() == VimEngine.Mode.INSERT) {
+            InputConnection ic = getCurrentInputConnection();
+            CharSequence b = ic == null ? null : ic.getTextBeforeCursor(1, 0);
+            if (b != null && b.toString().equals(" ")) {
+                deleteBefore(1);
+                if (!spaceReplaced.isEmpty()) applyKey(spaceReplaced);
+            }
+        }
+        spaceInserted = false;
+        clearGesture();
+    }
+
+    private void onDeleteWord() {
         InputConnection ic = getCurrentInputConnection();
         if (ic == null || passthrough) return;
         if (engine.getMode() != VimEngine.Mode.INSERT && engine.getMode() != VimEngine.Mode.REPLACE) return;

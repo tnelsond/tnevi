@@ -38,11 +38,12 @@ public final class MainActivity extends Activity {
             "REGISTERS \"a-\"z  \"A append  \"_ black hole  (unnamed = clipboard)\n" +
             "EX        :s/a/b/g  :%s  :'<,'>s  :g/re/d  :v/re/d  :sort  :12  :d  :y\n" +
             "          :w = send/submit   :q = hide keyboard   :wq / ZZ = both\n" +
-            "LONG-PRESS 1 ctrl  2 \u2191  3 redo  4 \u2193  9 `  0 \\   . ! ?\n" +
+            "LONG-PRESS top row: digits 1-0 (and % ^ ~ | [ ] < > { })   . for ! ?\n" +
+            "TOP BAR   mode badge = Insert/Normal   ctrl   \u2191 \u2193 (Normal: history, cursor)   \u21B6 undo (hold: redo)\n" +
             "HISTORY   \u2191 in Normal opens : with the last command; \u2191 \u2193 in : and / browse history\n" +
             "          q-p % ^ ~ | [ ] < > { }   a-l @ # & * - + = ( )   z-m _ $ \" ' : ; /\n" +
-            "LANGUAGE  long-press space: installed languages / other keyboards;\n" +
-            "          or slide on space, or Ctrl+Space (hardware)\n" +
+            "LANGUAGE  tap space twice, slide on space, or long-press space for the list;\n" +
+            "          Ctrl+Space on a hardware keyboard\n" +
             "          Khmer pack: \u21E7 for the corner character, long-press for extras\n" +
             "          command modes always show English keys\n" +
             "SWIPE     slide across the letters (English and Khmer packs); tap a suggestion to fix the word\n" +
@@ -94,6 +95,20 @@ public final class MainActivity extends Activity {
         col.addView(toggle("Start each field in Normal mode", VimKeyboardService.PREF_START_NORMAL, false, prefs));
         col.addView(toggle("Block cursor in Normal mode (selects the character under the cursor)",
                 VimKeyboardService.PREF_BLOCK_CURSOR, true, prefs));
+
+        TextView layoutTitle = text("English letter layout", 15);
+        layoutTitle.setPadding(0, px(12), 0, 0);
+        col.addView(layoutTitle);
+        android.widget.Spinner layouts = new android.widget.Spinner(this);
+        layouts.setAdapter(new android.widget.ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, LatinLayouts.NAMES));
+        layouts.setSelection(LatinLayouts.index(prefs.getString(VimKeyboardService.PREF_LATIN_LAYOUT, "qwerty")));
+        layouts.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View v, int pos, long id) {
+                prefs.edit().putString(VimKeyboardService.PREF_LATIN_LAYOUT, LatinLayouts.IDS[pos]).apply();
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+        });
+        col.addView(layouts);
 
         col.addView(toggle("Swipe typing", VimKeyboardService.PREF_SWIPE, true, prefs));
         col.addView(toggle("Next-word suggestions", VimKeyboardService.PREF_PREDICT, true, prefs));

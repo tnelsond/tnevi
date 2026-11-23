@@ -52,8 +52,10 @@ public final class VimKeyboardView extends LinearLayout {
         void onLanguageChanged(int index);
         /** Mode badge tapped: switch between Insert and Normal (command) mode. */
         void onModeToggle();
-        /** "Delete word" button on the top bar. */
-        void onDeleteWord();
+        /** Undo button on the top bar: Insert mode deletes the last swiped word, command modes undo. */
+        void onUndo();
+        /** Space tapped twice quickly (the view switches language; the service removes the first space). */
+        void onDoubleSpace();
     }
 
     private static final int BG = 0xFF15171C, KEY = 0xFF2B2F38, KEY_PRESSED = 0xFF4A505E,
@@ -61,7 +63,10 @@ public final class VimKeyboardView extends LinearLayout {
             ACCENT_ON = 0xFF3B82F6, TRAIL = 0xCC4ADE80;
 
     /** Row heights (dp). Pack layouts without a number row share the same total height. */
-    private static final int NUM_H = 46, ROW_H = 54, KM_H = (NUM_H + 3 * ROW_H) / 4;
+    /** Row heights (dp): top bar, Latin letter rows, rows of pack layouts (e.g. Khmer's four rows). */
+    private static final int BAR_H = 44, ROW_H = 54, PACK_ROW_H = 48;
+    /** The ?123 page has four rows in the height of three letter rows. */
+    private static final int SYM_ROW_H = 3 * ROW_H / 4;
 
     private static final String SHIFT = "SHIFT", SYM = "SYM", CTRL = "CTRL", LANG = "LANG";
     private static final Set<String> NORMAL_REPEAT = new HashSet<>(Arrays.asList(
@@ -151,7 +156,7 @@ public final class VimKeyboardView extends LinearLayout {
     private final float dp;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
-    private TextView modeBadge, statusText, deleteWord;
+    private TextView modeBadge, statusText, undoButton, upButton, downButton;
     private String modeLabel;
     private LinearLayout suggestionBar, keyRows;
     private final List<TextView> charKeys = new ArrayList<>();
@@ -205,12 +210,11 @@ public final class VimKeyboardView extends LinearLayout {
         LinearLayout bar = new LinearLayout(getContext());
         bar.setOrientation(HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(px(4), px(2), px(4), px(4));
+        bar.setPadding(px(4), px(2), px(2), px(2));
         modeBadge = new TextView(getContext());
         modeBadge.setTextColor(0xFF0B0C0F);
         modeBadge.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        modeBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        modeBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        modeBadge.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         modeBadge.setGravity(Gravity.CENTER);
         modeBadge.setPadding(px(12), 0, px(12), 0);
         modeBadge.setOnClickListener(new OnClickListener() {
@@ -219,7 +223,9 @@ public final class VimKeyboardView extends LinearLayout {
                 listener.onModeToggle();
             }
         });
-        bar.addView(modeBadge, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT));
+        LayoutParams blp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
+        blp.setMargins(0, px(4), 0, px(4));
+        bar.addView(modeBadge, blp);
         statusText = new TextView(getContext());
         statusText.setTextColor(TEXT);
         statusText.setTypeface(Typeface.MONOSPACE);
@@ -232,39 +238,80 @@ public final class VimKeyboardView extends LinearLayout {
         suggestionBar.setOrientation(HORIZONTAL);
         suggestionBar.setVisibility(GONE);
         bar.addView(suggestionBar, new LayoutParams(0, LayoutParams.MATCH_PARENT, 1f));
-        // Delete the last swiped word (or the word before the cursor); hold to keep deleting.
-        deleteWord = new TextView(getContext());
-        deleteWord.setText("\u232B word");
-        deleteWord.setTextColor(TEXT);
-        deleteWord.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        deleteWord.setGravity(Gravity.CENTER);
-        deleteWord.setPadding(px(10), 0, px(10), 0);
-        deleteWord.setBackground(rounded(KEY_SPECIAL, px(12)));
-        deleteWord.setOnTouchListener(new OnTouchListener() {
-            private final Runnable again = new Runnable() {
-                @Override public void run() { listener.onDeleteWord(); handler.postDelayed(this, 250); }
-            };
+        ctrlKey = barButton(bar, "ctrl", new Runnable() {
+            @Override public void run() { ctrl = !ctrl; refreshLabels(); }
+        }, false, null);
+        upButton = barButton(bar, "\u2191", new Runnable() {
+            @Override public void run() { listener.onKey("<Up>"); }
+        }, true, null);
+        downButton = barButton(bar, "\u2193", new Runnable() {
+            @Override public void run() { listener.onKey("<Down>"); }
+        }, true, null);
+        // Undo: Insert mode deletes the last swiped word (hold to keep deleting words);
+        // command modes run vim's u, and holding runs redo (Ctrl-r).
+        undoButton = barButton(bar, "\u21B6 undo", new Runnable() {
+            @Override public void run() { listener.onUndo(); }
+        }, false, new Runnable() {
+            @Override public void run() {
+                if (insertLike) {
+                    listener.onUndo();
+                    handler.postDelayed(this, 250);
+                } else listener.onKey("<C-r>");
+            }
+        });
+        addView(bar, new LayoutParams(LayoutParams.MATCH_PARENT, px(BAR_H)));
+    }
+
+    /**
+     * A button on the top bar. {@code tap} runs on touch; with {@code repeat} it repeats while held;
+     * {@code hold} (optional) runs after a long press instead of repeating.
+     */
+    private TextView barButton(LinearLayout bar, String label, final Runnable tap, final boolean repeat, final Runnable hold) {
+        final TextView b = new TextView(getContext());
+        b.setText(label);
+        b.setTextColor(TEXT);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, label.length() > 2 ? 14 : 20);
+        b.setGravity(Gravity.CENTER);
+        b.setMinWidth(px(42));
+        b.setPadding(px(8), 0, px(8), 0);
+        StateListDrawable bg = new StateListDrawable();
+        bg.addState(new int[]{android.R.attr.state_pressed}, rounded(KEY_PRESSED, px(10)));
+        bg.addState(new int[]{android.R.attr.state_selected}, rounded(ACCENT_ON, px(10)));
+        bg.addState(new int[]{}, rounded(KEY_SPECIAL, px(10)));
+        b.setBackground(bg);
+        final Runnable[] pending = new Runnable[1];
+        b.setOnTouchListener(new OnTouchListener() {
             @SuppressLint("ClickableViewAccessibility")
             @Override public boolean onTouch(View v, MotionEvent ev) {
                 switch (ev.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
                         v.setPressed(true);
                         v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                        listener.onDeleteWord();
-                        handler.postDelayed(again, 500);
+                        tap.run();
+                        if (repeat) {
+                            pending[0] = new Runnable() {
+                                @Override public void run() { tap.run(); handler.postDelayed(this, 60); }
+                            };
+                            handler.postDelayed(pending[0], 400);
+                        } else if (hold != null) {
+                            pending[0] = hold;
+                            handler.postDelayed(hold, 500);
+                        }
                         return true;
                     case MotionEvent.ACTION_UP: case MotionEvent.ACTION_CANCEL:
                         v.setPressed(false);
-                        handler.removeCallbacks(again);
+                        if (pending[0] != null) handler.removeCallbacks(pending[0]);
+                        if (hold != null) handler.removeCallbacks(hold);
+                        pending[0] = null;
                         return true;
                 }
                 return true;
             }
         });
-        LayoutParams dlp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
-        dlp.setMargins(px(4), px(1), px(2), px(1));
-        bar.addView(deleteWord, dlp);
-        addView(bar, new LayoutParams(LayoutParams.MATCH_PARENT, px(32)));
+        LayoutParams lp = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
+        lp.setMargins(px(3), px(4), px(3), px(4));
+        bar.addView(b, lp);
+        return b;
     }
 
     private LinearLayout row(int heightDp) {
@@ -288,29 +335,23 @@ public final class VimKeyboardView extends LinearLayout {
     private void buildKeys() {
         keyRows.removeAllViews();
         charKeys.clear();
-        ctrlKey = null;
         shiftKey = null;
 
         if (symbols && packLayout() != null && packLayout().symbols != null) {
             List<List<String[]>> rows = packLayout().symbols;
-            int h = (NUM_H + 3 * ROW_H) / rows.size();
             for (int r = 0; r < rows.size(); r++) {
-                LinearLayout row = row(h);
-                for (int i = 0; i < rows.get(r).size(); i++) {
-                    String[] e = rows.get(r).get(i);
-                    if (r == 0 && i < 10) row.addView(numberKey(e[0], null, i));
-                    else row.addView(charKey(Spec.of(e), 1f));
-                }
+                LinearLayout row = row(PACK_ROW_H);
+                for (int i = 0; i < rows.get(r).size(); i++) row.addView(charKey(Spec.of(rows.get(r).get(i)), 1f));
                 if (r == rows.size() - 1) row.addView(codeKey("\u232B", "<BS>", 1.4f, true));
                 keyRows.addView(row);
             }
         } else if (symbols) {
-            LinearLayout nums = row(NUM_H);
-            for (int i = 0; i < 10; i++) nums.addView(numberKey(s("1234567890".charAt(i)), null, i));
+            LinearLayout nums = row(SYM_ROW_H);
+            for (char c : "1234567890".toCharArray()) nums.addView(charKey(new Spec(s(c), null, (String) null, false), 1f));
             keyRows.addView(nums);
             String[] rows = {"!@#$%^&*()", "-_=+[]{}\\|", "`~<>;:'\"/?"};
             for (int i = 0; i < rows.length; i++) {
-                LinearLayout r = row(ROW_H);
+                LinearLayout r = row(SYM_ROW_H);
                 for (char c : rows[i].toCharArray()) r.addView(charKey(new Spec(s(c), null, (String) null, false), 1f));
                 if (i == 2) r.addView(codeKey("⌫", "<BS>", 1.5f, true));
                 keyRows.addView(r);
@@ -318,9 +359,8 @@ public final class VimKeyboardView extends LinearLayout {
         } else if (packLettersActive()) {
             List<List<String[]>> rows = packLayout().letters;
             int[][] swipe = packLayout().swipeIndices();
-            int h = (NUM_H + 3 * ROW_H) / rows.size();   // same total height as QWERTY + number row
             for (int r = 0; r < rows.size(); r++) {
-                LinearLayout row = row(h);
+                LinearLayout row = row(PACK_ROW_H);
                 boolean last = r == rows.size() - 1;
                 if (last) { shiftKey = codeKey("\u21E7", SHIFT, 1.35f, true); row.addView(shiftKey); }
                 for (int i = 0; i < rows.get(r).size(); i++) {
@@ -332,30 +372,29 @@ public final class VimKeyboardView extends LinearLayout {
                 keyRows.addView(row);
             }
         } else {
-            LinearLayout nums = row(NUM_H);
-            String digits = "1234567890";
-            for (int i = 0; i < 10; i++)
-                nums.addView(numberKey(s(digits.charAt(i)), null, i));
-            keyRows.addView(nums);
-            LinearLayout r1 = row(ROW_H);
-            for (char c : "qwertyuiop".toCharArray()) r1.addView(letter(c));
-            keyRows.addView(r1);
-            LinearLayout r2 = row(ROW_H);
-            for (char c : "asdfghjkl".toCharArray()) {
-                KeyView k = (KeyView) letter(c);
-                if (c == 'a' || c == 'l') {
-                    ((LayoutParams) k.getLayoutParams()).weight = 1.5f;
-                    if (c == 'a') k.extraLeft = 1f / 3; else k.extraRight = 1f / 3;
+            // Latin letters (QWERTY, Colemak, Dvorak, ...): no number row; digits are on
+            // long-press of the top row, as on Gboard with its number row off.
+            String[] rows = LatinLayouts.rows(latinLayout);
+            for (int r = 0; r < 3; r++) {
+                LinearLayout row = row(ROW_H);
+                String keys = rows[r];
+                float side = keys.length() <= 7 ? 1.5f : keys.length() <= 8 ? 1.25f : 1f;
+                if (r == 2) { shiftKey = codeKey("\u21E7", SHIFT, side, true); row.addView(shiftKey); }
+                for (int i = 0; i < keys.length(); i++) {
+                    char c = keys.charAt(i);
+                    Spec sp = new Spec(s(c), LatinLayouts.shifted(c), LatinLayouts.options(latinLayout, r, i, c), Character.isLetter(c));
+                    if (c >= 'a' && c <= 'z') sp.swipeIndex = c - 'a';
+                    KeyView k = (KeyView) charKey(sp, 1f);
+                    if (keys.length() == 9 && (i == 0 || i == 8) && r == 1) {
+                        // like Gboard's A and L: the half key of space beside them is theirs too
+                        ((LayoutParams) k.getLayoutParams()).weight = 1.5f;
+                        if (i == 0) k.extraLeft = 1f / 3; else k.extraRight = 1f / 3;
+                    }
+                    row.addView(k);
                 }
-                r2.addView(k);
+                if (r == 2) row.addView(codeKey("\u232B", "<BS>", side, true));
+                keyRows.addView(row);
             }
-            keyRows.addView(r2);
-            LinearLayout r3 = row(ROW_H);
-            shiftKey = codeKey("⇧", SHIFT, 1.5f, true);
-            r3.addView(shiftKey);
-            for (char c : "zxcvbnm".toCharArray()) r3.addView(letter(c));
-            r3.addView(codeKey("⌫", "<BS>", 1.5f, true));
-            keyRows.addView(r3);
         }
 
         LinearLayout bottom = row(ROW_H);
@@ -377,18 +416,13 @@ public final class VimKeyboardView extends LinearLayout {
 
     private static String s(char c) { return String.valueOf(c); }
 
-    /** Gboard-style long-press characters for English letters. */
-    private static final String EN_TOP = "qwertyuiop", EN_TOP_ALT = "%^~|[]<>{}";  // Gboard standard
-    private static final String EN_MID = "asdfghjkl", EN_MID_ALT = "@#&*-+=()";
-    private static final String EN_BOT = "zxcvbnm", EN_BOT_ALT = "_$\"':;/";
+    private String latinLayout = "qwerty";
 
-    /** Long-press on the number keys 1..0: ctrl, up, redo and common vim symbols. */
-    private static final String[] NUM_ALTS = {CTRL, "<Up>", "<C-r>", "<Down>", "", "", "", "", "`", "\\"};  // only what the letters don't have
-
-    private TextView numberKey(String main, String shifted, int i) {
-        TextView t = charKey(new Spec(main, shifted, NUM_ALTS[i], false), 1f);
-        if (i == 0) ctrlKey = t;
-        return t;
+    /** Chooses the built-in Latin layout (QWERTY, Colemak, ...). */
+    public void setLatinLayout(String id) {
+        if (id == null || id.equals(latinLayout)) return;
+        latinLayout = id;
+        buildKeys();
     }
 
     private static String altLabel(String a) {
@@ -399,17 +433,6 @@ public final class VimKeyboardView extends LinearLayout {
             case "<C-r>": return "\u21B7";
         }
         return a;
-    }
-
-    private TextView letter(char c) {
-        String alt = null;
-        int i;
-        if ((i = EN_TOP.indexOf(c)) >= 0) alt = s(EN_TOP_ALT.charAt(i));
-        else if ((i = EN_MID.indexOf(c)) >= 0) alt = s(EN_MID_ALT.charAt(i));
-        else if ((i = EN_BOT.indexOf(c)) >= 0) alt = s(EN_BOT_ALT.charAt(i));
-        Spec sp = new Spec(s(c), s(Character.toUpperCase(c)), alt, true);
-        sp.swipeIndex = c - 'a';
-        return charKey(sp, 1f);
     }
 
     private static GradientDrawable rounded(int color, float radius) {
@@ -459,8 +482,9 @@ public final class VimKeyboardView extends LinearLayout {
             String main = useShift ? sp.shifted : sp.base;
             String label = kmText ? Layout.label(main) : main;
             StringBuilder hint = new StringBuilder();
+            int shown = 0;
             for (String a : sp.alts) {
-                if (a.equals(main)) continue;
+                if (a.equals(main) || shown++ >= 2) continue;
                 if (hint.length() > 0) hint.append(',');
                 hint.append(kmText && sp.alts.length == 1 && !a.startsWith("<") && !a.equals(CTRL) ? Layout.label(a) : altLabel(a));
             }
@@ -690,7 +714,17 @@ public final class VimKeyboardView extends LinearLayout {
                 dismissOptions();
                 if ("IME".equals(pick)) listener.onLongPressSpace();
                 else if (pick != null && pick.startsWith("L")) selectLanguage(Integer.parseInt(pick.substring(1)));
-            } else if (!fired) send(" ", true);
+            } else if (!fired) {
+                long now = android.os.SystemClock.uptimeMillis();
+                if (textEntry && langs.size() > 1 && now - lastSpaceTap < 350) {
+                    lastSpaceTap = 0;
+                    listener.onDoubleSpace();
+                    toggleLanguage();
+                } else {
+                    send(" ", true);
+                    lastSpaceTap = now;
+                }
+            }
         }
         else if (kind == DOWN_CHAR) {
             if (popup != null) {
@@ -711,8 +745,11 @@ public final class VimKeyboardView extends LinearLayout {
         return (shift || capsLock) && sp.shifted != null ? sp.shifted : sp.base;
     }
 
+    private long lastSpaceTap;
+
     /** Applies ctrl, consumes one-shot shift, sends; returns what was sent. */
     private String send(String k, boolean applyModifiers) {
+        if (!k.equals(" ")) lastSpaceTap = 0;
         if (applyModifiers && ctrl && k.length() == 1) {
             k = "<C-" + k.toLowerCase() + ">";
             ctrl = false;
@@ -796,7 +833,7 @@ public final class VimKeyboardView extends LinearLayout {
         for (int i = 0; i < labels.length; i++) labels[i] = km ? Layout.label(sp.alts[i]) : sp.alts[i];
         View anchor = downView;
         if (anchor == null) return;
-        showOptions(sp.alts, labels, Math.max(anchor.getWidth(), px(40)), 22, -1);
+        showOptions(sp.alts, labels, Math.max(((KeyView) anchor).visibleWidth(), px(40)), 22, 0);
     }
 
     /**
@@ -956,7 +993,8 @@ public final class VimKeyboardView extends LinearLayout {
             if (cur().layout != null) buildKeys(); else refreshLabels();
         }
         if (!insertLike) setSuggestions(null);
-        deleteWord.setVisibility(insertLike ? VISIBLE : GONE);
+        upButton.setVisibility(insertLike ? GONE : VISIBLE);
+        downButton.setVisibility(insertLike ? GONE : VISIBLE);
     }
 
     /** Shows tappable alternatives for the last swiped word (null/empty hides them). */
