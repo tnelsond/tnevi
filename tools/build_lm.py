@@ -139,7 +139,7 @@ def english_vocab():
             break
         if not re.fullmatch(r"[a-z]+(?:'[a-z]+)?", w) or w in seen or w in ABBREVIATIONS:
             continue
-        if len(w.replace("'", "")) <= 2 and w not in SHORT_WORDS:
+        if "'" not in w and len(w) <= 2 and w not in SHORT_WORDS:   # contractions like i'm are fine
             continue
         if w == "i" or w.startswith("i'"):
             disp = "I" + w[1:]

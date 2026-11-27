@@ -41,7 +41,7 @@ The setup screen has a toggle to start every field in Normal mode.
   - `.` → `!` `?`
   - QWERTZ adds ä ö ü ß. AZERTY adds é è ê ë à â ç ù û î ï ô œ.
   - The ?123 page has digits and every other symbol, including `` ` `` and `\`.
-- The bottom row has `?123 , space . ⏎`.
+- The bottom row has `?123 , space . ⏎`. In fields with an action (a search box, a chat's send button, a form's next field), the Enter key shows **search / send / go / done / next** in blue while you type, and pressing it performs that action, like Gboard. Apps that ask for a newline key keep ⏎.
 - Hold ⌫ to repeat. Letters don't repeat when held, because long-press types the corner character; use counts like `5j` instead.
 - In Normal mode the character under the cursor is selected to imitate a block cursor (can be turned off).
 - Tapping/dragging in the field moves the cursor; dragging a selection in Normal mode enters Visual mode.
@@ -94,6 +94,7 @@ In Normal mode, `x`, `h` and `l` still treat a whole cluster as one character.
 - **Context:** the decoder looks at the 1–2 words before the cursor (an n-gram language model). So "I'll see you" beats "I'll see toy", and "the United" suggests "States". Khmer text has no spaces, so the words before the cursor are found by splitting the text with the pack's dictionary.
 - Up to 3 alternatives appear in the status bar; tap one to replace the word.
 - **Next-word suggestions:** after a space (or ›|‹ in Khmer), the bar shows 3 likely next words. Tap one to insert it, and the next 3 appear.
+- Names (capitalised dictionary words like London) lose close calls to ordinary words, so swiping "I'm" doesn't give a rare name.
 - Shift or caps lock capitalises a swiped English word. English words at the start of a sentence are capitalised in fields that ask for it.
 - **English vocabulary:** 40,000 words, checked against a spelling dictionary. That leaves out acronyms (tv, usa, lol), abbreviations (govt, Oct), web tokens (http) and stray 1–2 letter fragments. Proper nouns keep their capitals; contractions are included.
 - **Khmer vocabulary:** 23,655 words from about 37 million words of segmented Khmer Wikipedia and web text. Words must be well-formed and typeable on the layout, and must appear in the SIL Khmer word lists unless common in the text. Buddhist scripture, which makes up much of the web text, is filtered out so suggestions reflect everyday Khmer.

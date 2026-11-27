@@ -411,7 +411,9 @@ public final class VimKeyboardView extends LinearLayout {
         spaceKey.setTextColor(TEXT_DIM);
         bottom.addView(spaceKey);
         bottom.addView(charKey(new Spec(".", null, new String[]{"!", "?"}, false), 1f));
-        bottom.addView(codeKey("⏎", "<CR>", 1.6f, true));
+        enterKey = (KeyView) codeKey("⏎", "<CR>", 1.6f, true);
+        bottom.addView(enterKey);
+        refreshEnter();
         keyRows.addView(bottom);
         refreshLabels();
     }
@@ -424,6 +426,26 @@ public final class VimKeyboardView extends LinearLayout {
     private static String s(char c) { return String.valueOf(c); }
 
     private String latinLayout = "qwerty";
+    private KeyView enterKey;
+    private String enterAction;
+
+    /** The field's Enter action ("search", "send", ...), shown on the Enter key in Insert mode; null = ⏎. */
+    public void setEnterAction(String action) {
+        enterAction = action;
+        refreshEnter();
+    }
+
+    private void refreshEnter() {
+        if (enterKey == null) return;
+        boolean action = enterAction != null && insertLike;
+        enterKey.setText(action ? enterAction : "⏎");
+        enterKey.setTextSize(TypedValue.COMPLEX_UNIT_SP, action ? 15 : 21);
+        enterKey.setTextColor(action ? 0xFFFFFFFF : TEXT_DIM);
+        StateListDrawable bg = new StateListDrawable();
+        bg.addState(new int[]{android.R.attr.state_pressed}, rounded(KEY_PRESSED, px(6)));
+        bg.addState(new int[]{}, rounded(action ? ACCENT_ON : KEY_SPECIAL, px(6)));
+        enterKey.setKeyBackground(bg);
+    }
 
     /** Chooses the built-in Latin layout (QWERTY, Colemak, ...). */
     public void setLatinLayout(String id) {
@@ -1001,6 +1023,7 @@ public final class VimKeyboardView extends LinearLayout {
             buildKeys();   // command modes add the number row (and use English keys)
         }
         if (!insertLike) setSuggestions(null);
+        refreshEnter();
         upButton.setVisibility(insertLike ? GONE : VISIBLE);
         ctrlKey.setVisibility(insertLike ? GONE : VISIBLE);   // ctrl is for command modes
         if (insertLike && ctrl) { ctrl = false; refreshLabels(); }

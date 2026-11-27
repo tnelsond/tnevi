@@ -19,6 +19,7 @@ import java.util.Random;
  */
 public class SwipeContextTest {
     static float NOISE = Float.parseFloat(System.getProperty("noise", "0.28"));
+    static float PROPER = Float.parseFloat(System.getProperty("proper", "1.5"));
 
     public static void main(String[] a) throws Exception {
         final LanguageModel lm = LanguageModel.load(new FileInputStream(a[0]));
@@ -87,7 +88,7 @@ public class SwipeContextTest {
                         final int[] ctx = lm.contextOf(before, layout);
                         List<String> base = dec.decode(g[0], g[1], g[0].length, c, 1f, 3);
                         List<String> res = dec.decode(g[0], g[1], g[0].length, c, 1f, 3, new SwipeDecoder.Scorer() {
-                            public float cost(int idx) { return lm.cost(ctx[0], ctx[1], idx + 1); }
+                            public float cost(int idx) { return lm.cost(ctx[0], ctx[1], idx + 1) + (Character.isUpperCase(lm.word(idx + 1).charAt(0)) && !lm.word(idx + 1).startsWith("I") ? PROPER : 0); }
                         });
                         n++;
                         if (!base.isEmpty() && base.get(0).equals(word)) base1++;

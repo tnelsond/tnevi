@@ -49,6 +49,10 @@ public final class VimKeyboardService extends InputMethodService
     private int suggestKind = SUGGEST_NONE;
     /** The text inserted by the last gesture (leading space + word), for suggestion replacement. */
     private String lastGestureWord, lastGesturePrefix;
+    private static final float PROPER_NOUN_COST = 1.5f;
+    /** Label of the field's Enter action (search, send, ...) or null when Enter types a new line. */
+    private String enterAction;
+
     /** Separator typed after the last swiped/suggested word (" " or zero-width space), or null once anything else is typed. */
     private String autoSpace;
     /** Closing punctuation that takes the place of an automatic space ("word ." -> "word."). */
@@ -77,6 +81,26 @@ public final class VimKeyboardService extends InputMethodService
         builtIn.add(new LanguagePacks.Language("en", "English"));
         languages = builtIn;
         reloadPacks();
+    }
+
+    /**
+     * What Enter does in this field: a label for its action (search, send, go, done, next...),
+     * or null when Enter types a new line (no action, or the app asked for a newline key).
+     */
+    private static String enterActionLabel(EditorInfo ei) {
+        if (ei == null) return null;
+        if ((ei.inputType & InputType.TYPE_MASK_CLASS) == InputType.TYPE_NULL) return null;
+        if ((ei.imeOptions & EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0) return null;
+        if (ei.actionLabel != null && ei.actionLabel.length() > 0) return ei.actionLabel.toString().toLowerCase();
+        switch (ei.imeOptions & EditorInfo.IME_MASK_ACTION) {
+            case EditorInfo.IME_ACTION_SEARCH: return "search";
+            case EditorInfo.IME_ACTION_SEND: return "send";
+            case EditorInfo.IME_ACTION_GO: return "go";
+            case EditorInfo.IME_ACTION_DONE: return "done";
+            case EditorInfo.IME_ACTION_NEXT: return "next";
+            case EditorInfo.IME_ACTION_PREVIOUS: return "prev";
+            default: return null;
+        }
     }
 
     /** Loads language packs in the background and swaps them in on the main thread. */
@@ -142,6 +166,7 @@ public final class VimKeyboardService extends InputMethodService
 
     @Override public View onCreateInputView() {
         view = new VimKeyboardView(this, this, viewLanguages(), langIndex);
+        view.setEnterAction(enterAction);
         view.setLatinLayout(getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_LATIN_LAYOUT, "qwerty"));
         updateUi();
         return view;
@@ -162,7 +187,9 @@ public final class VimKeyboardService extends InputMethodService
         super.onStartInputView(ei, restarting);
         if (LanguagePacks.fingerprint(this) != packFingerprint) reloadPacks();
         else if (view != null) view.setLanguages(viewLanguages(), langIndex); // settings may have changed
+        enterAction = enterActionLabel(ei);
         if (view != null) {
+            view.setEnterAction(enterAction);
             view.setLatinLayout(getSharedPreferences(PREFS, MODE_PRIVATE).getString(PREF_LATIN_LAYOUT, "qwerty"));
             view.resetLayer();
         }
@@ -230,6 +257,13 @@ public final class VimKeyboardService extends InputMethodService
     // ------------------------------------------------------------------ keyboard events
 
     @Override public void onKey(String key) {
+        if (key.equals("<CR>") && enterAction != null && engine.getMode() == VimEngine.Mode.INSERT && !passthrough) {
+            // Enter is the field's action (search, send, go...), like Gboard.
+            clearGesture();
+            autoSpace = null;
+            performEditorAction();
+            return;
+        }
         String auto = autoSpace;
         autoSpace = null;
         spaceInserted = key.equals(" ");
@@ -291,7 +325,10 @@ public final class VimKeyboardService extends InputMethodService
         // Context: the words before the cursor pick between similar swipes ("I'll see you" vs "I'll see toy").
         final int[] ctx = L.context(ic.getTextBeforeCursor(150, 0));
         List<String> results = d.decode(xs, ys, count, centers, keyWidth, 4, new SwipeDecoder.Scorer() {
-            @Override public float cost(int index) { return m.cost(ctx[0], ctx[1], index + 1); }
+            @Override public float cost(int index) {
+                // Rare names lose close calls to ordinary words ("I'm" over "Ulm").
+                return m.cost(ctx[0], ctx[1], index + 1) + (m.isProperNoun(index + 1) ? PROPER_NOUN_COST : 0);
+            }
         });
         if (results.isEmpty()) return false;
         if (caseMode == 0 && L.layout == null) {

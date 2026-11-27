@@ -88,6 +88,12 @@ public final class LanguageModel {
     /** Number of ids including {@code <s>}. */
     public int size() { return words.length; }
 
+    /** Capitalised dictionary words other than I/I'm/...: names like "Ulm" that should lose close calls. */
+    public boolean isProperNoun(int id) {
+        String w = words[id];
+        return !w.isEmpty() && Character.isUpperCase(w.charAt(0)) && !(w.equals("I") || w.startsWith("I'")) && !w.equals("OK");
+    }
+
     /** Display form of a word id (e.g. "London", "I'm", "the"). */
     public String word(int id) { return words[id]; }
 
